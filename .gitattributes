@@ -1,0 +1,14 @@
+# Windows launchers use CRLF; source and documentation stay LF.
+*.bat text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*._pth text eol=lf
+LICENSE text eol=lf
+runtime/windows-python/LICENSE.txt -whitespace

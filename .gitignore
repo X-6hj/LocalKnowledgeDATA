@@ -1,0 +1,36 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Runtime state and logs
+.server.pid
+logs/*.log*
+
+# Personal knowledge files are private by default. Only reviewed samples below
+# are intentionally public; add any future public material explicitly.
+library/*
+!library/示例资料/
+!library/示例资料/**
+!library/计算机网络/
+!library/计算机网络/**
+!library/算法/
+!library/算法/**
+
+# Keep only current, referenced acceptance evidence on the main branch.
+# Historical screenshots live on the remote archive branch.
+qa/screenshots/*
+!qa/screenshots/hover-card-scroll-fixed.png
+!qa/screenshots/nested-directory-mobile.png
+!qa/screenshots/nested-directory-navigation.png
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Temporary downloads
+*.tmp
+*.part
+*.crdownload

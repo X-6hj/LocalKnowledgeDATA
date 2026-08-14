@@ -1,0 +1,7 @@
+python314.zip
+.
+..\..
+
+# The project root is added explicitly because embedded Python ignores the current directory.
+# Uncomment to run site.main() automatically
+#import site

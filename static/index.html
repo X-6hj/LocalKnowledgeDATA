@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="离线、自动索引、易维护的本地知识库">
+  <title>拾页星图 · 本地知识库</title>
+  <link rel="icon" href="/static/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/catalog.js"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">跳到知识条目</a>
+
+  <header class="hero">
+    <div class="hero-image" aria-hidden="true"></div>
+    <div class="hero-shade" aria-hidden="true"></div>
+    <nav class="topbar" aria-label="页面工具">
+      <a class="brand" href="/" aria-label="拾页星图本地知识库首页">
+        <span class="brand-mark" aria-hidden="true">拾</span>
+        <span><strong>拾页星图</strong><small>FOLIO ATLAS</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="sync-state" id="syncState" role="status"><i aria-hidden="true"></i> 正在连接</span>
+        <button class="icon-button" id="themeToggle" type="button" aria-label="切换明暗主题" title="切换明暗主题">◐</button>
+        <button class="icon-button" id="helpButton" type="button" aria-label="查看使用帮助" title="查看使用帮助">?</button>
+      </div>
+    </nav>
+
+    <div class="hero-content">
+      <p class="eyebrow">PERSONAL KNOWLEDGE COORDINATES · 本地离线</p>
+      <h1 id="siteTitle">把资料放对位置，<br><em>知识自然浮现。</em></h1>
+      <p class="hero-copy" id="siteSubtitle">把散落的资料，整理成可抵达的知识坐标。</p>
+
+      <form class="search-box" id="searchForm" role="search">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <label class="sr-only" for="searchInput">搜索目录、说明、标签或文件名</label>
+        <input id="searchInput" type="search" autocomplete="off" placeholder="全库搜索目录、说明、标签或文件名…">
+        <kbd>/</kbd>
+        <button id="clearSearch" type="button" aria-label="清空搜索" title="清空搜索" hidden>×</button>
+      </form>
+
+      <dl class="hero-stats" aria-label="知识库统计">
+        <div><dt id="itemCount">—</dt><dd id="itemCountLabel">知识目录</dd></div>
+        <div><dt id="fileCount">—</dt><dd>本地文件</dd></div>
+        <div><dt id="categoryCount">—</dt><dd id="categoryCountLabel">目录层级</dd></div>
+      </dl>
+    </div>
+  </header>
+
+  <main id="content" class="workspace" tabindex="-1">
+    <aside class="index-panel" aria-label="知识分类">
+      <div class="panel-heading">
+        <span>根目录索引</span>
+        <span id="visibleCount">0</span>
+      </div>
+      <nav id="categoryList" class="category-list" aria-label="按分类筛选"></nav>
+      <div class="index-note">
+        <span aria-hidden="true">↻</span>
+        <p><strong>自动同步</strong>把资料文件夹放入 <code>library</code>，页面会自行更新。</p>
+      </div>
+    </aside>
+
+    <section class="catalog" aria-labelledby="catalogTitle">
+      <nav id="breadcrumbs" class="breadcrumbs" aria-label="当前位置"></nav>
+      <div class="catalog-toolbar">
+        <div>
+          <p class="section-kicker">KNOWLEDGE INDEX</p>
+          <h2 id="catalogTitle">全部目录</h2>
+          <p id="resultSummary" class="result-summary" aria-live="polite">正在读取本地目录…</p>
+        </div>
+        <div class="view-tools" aria-label="显示选项">
+          <button id="favoriteFilter" class="tool-button" type="button" aria-pressed="false">☆ 仅看收藏</button>
+          <select id="sortSelect" aria-label="排序方式">
+            <option value="default">推荐顺序</option>
+            <option value="title">按名称</option>
+            <option value="modified">最近更新</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="typeFilters" class="type-filters" aria-label="按文件类型筛选"></div>
+      <section id="currentFolderPanel" class="current-folder-panel" aria-labelledby="currentFolderTitle" hidden>
+        <div>
+          <p class="section-kicker">CURRENT DIRECTORY</p>
+          <h3 id="currentFolderTitle"></h3>
+          <p id="currentFolderDescription"></p>
+        </div>
+        <div id="currentFolderFiles" class="current-folder-files"></div>
+      </section>
+      <div id="cardGrid" class="card-grid" aria-live="polite" aria-busy="true"></div>
+
+      <div id="emptyState" class="empty-state" hidden>
+        <span aria-hidden="true">⌁</span>
+        <h3>没有找到对应资料</h3>
+        <p>换一个关键词或清除筛选条件；新资料放入 library 后会自动出现。</p>
+        <button id="resetFilters" type="button">清除全部筛选</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>拾页星图 · FOLIO ATLAS</span>
+    <span>数据只在本机流转 · <span id="lastUpdated">尚未同步</span></span>
+  </footer>
+
+  <div id="hoverCard" class="hover-card" role="tooltip" hidden>
+    <p class="hover-label">目录说明</p>
+    <h3 id="hoverTitle"></h3>
+    <p id="hoverDescription"></p>
+    <div id="hoverMeta" class="hover-meta"></div>
+  </div>
+
+
+  <dialog id="helpDialog" class="detail-dialog help-dialog" aria-labelledby="helpTitle">
+    <form method="dialog"><button class="dialog-close" aria-label="关闭帮助">×</button></form>
+    <p class="section-kicker">QUICK GUIDE</p>
+    <h2 id="helpTitle">三步建立多级资料目录</h2>
+    <ol class="help-steps">
+      <li><span>1</span><div><strong>创建分类</strong><p>在 library 下新建一个文件夹，例如“编程开发”。</p></div></li>
+      <li><span>2</span><div><strong>按需要继续嵌套</strong><p>例如“算法 / 数论 / 质数”，目录深度不受固定层级限制。</p></div></li>
+      <li><span>3</span><div><strong>为每级添加说明</strong><p>任意目录中添加 <code>_说明.md</code>，悬浮该目录即可查看。</p></div></li>
+    </ol>
+    <p class="help-tip">完整说明见项目根目录的 <strong>README.md</strong> 与 <strong>docs/使用手册.md</strong>。</p>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
