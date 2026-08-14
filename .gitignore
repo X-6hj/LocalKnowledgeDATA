@@ -8,15 +8,36 @@ __pycache__/
 .server.pid
 logs/*.log*
 
-# Personal knowledge files are private by default. Only reviewed samples below
-# are intentionally public; add any future public material explicitly.
+# Personal knowledge files are private by default. Only the exact reviewed files
+# below are public; future files under the same folders remain ignored.
 library/*
 !library/示例资料/
-!library/示例资料/**
+library/示例资料/*
+!library/示例资料/_分类.md
+!library/示例资料/欢迎使用/
+library/示例资料/欢迎使用/*
+!library/示例资料/欢迎使用/_说明.md
+!library/示例资料/欢迎使用/欢迎使用.txt
 !library/计算机网络/
-!library/计算机网络/**
+library/计算机网络/*
+!library/计算机网络/_分类.md
+!library/计算机网络/Linux 网络项目学习路线/
+library/计算机网络/Linux 网络项目学习路线/*
+!library/计算机网络/Linux 网络项目学习路线/_说明.md
+!library/计算机网络/Linux 网络项目学习路线/AI辅助的Linux网络项目学习路线.md
 !library/算法/
-!library/算法/**
+library/算法/*
+!library/算法/_分类.md
+!library/算法/数论/
+library/算法/数论/*
+!library/算法/数论/_说明.md
+!library/算法/数论/最大公约数/
+library/算法/数论/最大公约数/*
+!library/算法/数论/最大公约数/欧几里得.cpp
+!library/算法/数论/质数/
+library/算法/数论/质数/*
+!library/算法/数论/质数/_说明.md
+!library/算法/数论/质数/埃氏筛.cpp
 
 # Keep only current, referenced acceptance evidence on the main branch.
 # Historical screenshots live on the remote archive branch.
