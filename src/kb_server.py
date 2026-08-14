@@ -240,7 +240,14 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self._security_headers()
         self.end_headers()
-        self.wfile.write(data)
+        self._write_body(data)
+
+    def _write_body(self, data: bytes) -> bool:
+        try:
+            self.wfile.write(data)
+            return True
+        except (BrokenPipeError, ConnectionResetError):
+            return False
 
     def _error(self, message: str, status: int) -> None:
         self._json({"ok": False, "data": None, "error": message}, status)
@@ -366,7 +373,8 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
                     chunk = handle.read(min(65_536, remaining))
                     if not chunk:
                         break
-                    self.wfile.write(chunk)
+                    if not self._write_body(chunk):
+                        break
                     remaining -= len(chunk)
 
 

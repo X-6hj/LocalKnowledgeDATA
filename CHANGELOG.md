@@ -10,9 +10,13 @@
 - 文件操作接口只接受 `application/json`，使浏览器跨站请求必须预检，并阻断 `text/plain` 等简单请求绕过；
 - 新增真实 HTTP 回归测试，确认跨站请求返回 403、简单内容类型返回 415，本机 `127.0.0.1` 与 `localhost` 同源请求保持兼容。
 
+### 稳定性
+
+- 客户端在 JSON 响应或文件传输期间提前断开时，服务安静结束该响应，不再输出 `BrokenPipeError` 或 `ConnectionResetError` 堆栈。
+
 ### 验证
 
-- WSL Python 与 Windows 便携 Python 均 18/18 通过；
+- WSL Python 与 Windows 便携 Python 均 19/19 通过；
 - Python 编译、JavaScript 语法和 ResourceWarning 严格检查通过。
 
 ## [1.3.0] - 2026-08-13

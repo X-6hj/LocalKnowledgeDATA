@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.kb_scanner import parse_markdown_meta, scan_library
-from src.kb_server import KnowledgeBaseApp, create_server
+from src.kb_server import KnowledgeBaseApp, KnowledgeBaseHandler, create_server
 from stop import stop_windows_process, stop_windows_project_processes
 
 
@@ -188,6 +188,24 @@ class ScannerTests(unittest.TestCase):
 
 
 class HttpSecurityTests(unittest.TestCase):
+    def test_response_write_ignores_client_disconnect(self) -> None:
+        class DisconnectingWriter:
+            def __init__(self, error_type: type[OSError]) -> None:
+                self.error_type = error_type
+
+            def write(self, data: bytes) -> None:
+                raise self.error_type("客户端已断开")
+
+        for error_type in (BrokenPipeError, ConnectionResetError):
+            with self.subTest(error_type=error_type.__name__):
+                handler = object.__new__(KnowledgeBaseHandler)
+                setattr(handler, "send_response", lambda status: None)
+                setattr(handler, "send_header", lambda *args: None)
+                setattr(handler, "end_headers", lambda: None)
+                setattr(handler, "wfile", DisconnectingWriter(error_type))
+
+                handler._json({"ok": True})
+
     def _request_open(
         self,
         port: int,
