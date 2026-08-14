@@ -1,4 +1,5 @@
-# Windows launchers use CRLF; source and documentation stay LF.
+# Keep cross-platform checkouts stable; Windows launchers override to CRLF.
+* text=auto eol=lf
 *.bat text eol=crlf
 *.vbs text eol=crlf
 *.ps1 text eol=crlf
