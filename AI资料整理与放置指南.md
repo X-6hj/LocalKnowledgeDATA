@@ -1,6 +1,6 @@
 # AI 资料整理与放置指南
 
-> 适用项目：当前 `LocalKnowledgeBase` 项目目录（拾页星图 · Folio Atlas）
+> 适用项目：当前拾页星图（Folio Atlas）项目根目录；目录名可以是 GitHub 默认的 `LocalKnowledgeDATA`，也可以由使用者自行命名。
 > 用途：用户已有文档时，未来 AI 只需阅读本文件即可完成目录设计、说明编写、复制和验证，无需扫描整个项目。
 
 ## 1. 工作边界
