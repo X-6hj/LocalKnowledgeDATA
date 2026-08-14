@@ -1,6 +1,8 @@
 # Python generated files
 __pycache__/
 *.py[cod]
+# Portable Windows Python needs native extension modules despite *.pyd matching above.
+!runtime/windows-python/*.pyd
 
 # Runtime state and logs
 .server.pid
