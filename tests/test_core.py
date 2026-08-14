@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.kb_scanner import parse_markdown_meta, scan_library
-from src.kb_server import KnowledgeBaseApp
+from src.kb_server import KnowledgeBaseApp, create_server
 from stop import stop_windows_process, stop_windows_project_processes
 
 
@@ -181,6 +185,120 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(meta["order"], 3)
             self.assertFalse(meta["pinned"])
             self.assertEqual(body, "标题\n正文")
+
+
+class HttpSecurityTests(unittest.TestCase):
+    def _request_open(
+        self,
+        port: int,
+        *,
+        origin: str | None,
+        content_type: str,
+    ) -> tuple[int, dict[str, object]]:
+        body = json.dumps({"path": "公开/item.txt", "action": "default"}).encode("utf-8")
+        headers = {"Content-Type": content_type}
+        if origin is not None:
+            headers["Origin"] = origin
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/open",
+            data=body,
+            method="POST",
+            headers=headers,
+        )
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(request, timeout=3) as response:
+                return response.status, json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                return exc.code, json.loads(exc.read().decode("utf-8"))
+            finally:
+                exc.close()
+
+    def test_open_action_rejects_cross_origin_and_allows_loopback_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            item = base / "library" / "公开" / "item.txt"
+            item.parent.mkdir(parents=True)
+            item.write_text("ok", encoding="utf-8")
+            server = create_server(base, "127.0.0.1", 0)
+            app = getattr(server, "app")
+            actions: list[tuple[str, str]] = []
+            app.perform_file_action = lambda path, action: actions.append((path.name, action))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            port = server.server_address[1]
+            try:
+                rejected_status, _ = self._request_open(
+                    port,
+                    origin="https://attacker.example",
+                    content_type="application/json",
+                )
+                self.assertEqual(rejected_status, 403)
+                self.assertEqual(actions, [])
+
+                allowed_status, _ = self._request_open(
+                    port,
+                    origin=f"http://127.0.0.1:{port}",
+                    content_type="application/json",
+                )
+                self.assertEqual(allowed_status, 200)
+
+                localhost_status, _ = self._request_open(
+                    port,
+                    origin=f"http://localhost:{port}",
+                    content_type="application/json",
+                )
+                self.assertEqual(localhost_status, 200)
+                self.assertEqual(actions, [("item.txt", "default"), ("item.txt", "default")])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
+    def test_open_action_rejects_simple_cross_site_content_type(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            item = base / "library" / "公开" / "item.txt"
+            item.parent.mkdir(parents=True)
+            item.write_text("ok", encoding="utf-8")
+            server = create_server(base, "127.0.0.1", 0)
+            app = getattr(server, "app")
+            actions: list[tuple[str, str]] = []
+            app.perform_file_action = lambda path, action: actions.append((path.name, action))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                status, _ = self._request_open(
+                    server.server_address[1],
+                    origin=None,
+                    content_type="text/plain;charset=UTF-8",
+                )
+                self.assertEqual(status, 415)
+                self.assertEqual(actions, [])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
+
+    def test_health_reports_security_patch_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp), "127.0.0.1", 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            try:
+                with opener.open(
+                    f"http://127.0.0.1:{server.server_address[1]}/api/health",
+                    timeout=3,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(payload["data"]["version"], "1.3.1")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
 
 
 class PathSafetyTests(unittest.TestCase):

@@ -22,6 +22,9 @@ from typing import Any
 from .kb_scanner import load_json_safe, scan_library
 
 
+APP_VERSION = "1.3.1"
+
+
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -209,7 +212,7 @@ class KnowledgeBaseApp:
 
 
 class KnowledgeBaseHandler(BaseHTTPRequestHandler):
-    server_version = "LocalKnowledgeBase/1.3.0"
+    server_version = f"LocalKnowledgeBase/{APP_VERSION}"
 
     @property
     def app(self) -> KnowledgeBaseApp:
@@ -252,7 +255,7 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/health":
-            self._json({"ok": True, "data": {"status": "ready", "version": "1.3.0"}, "error": None})
+            self._json({"ok": True, "data": {"status": "ready", "version": APP_VERSION}, "error": None})
             return
         if path == "/api/catalog":
             self._json({"ok": True, "data": self.app.catalog(), "error": None})
@@ -272,6 +275,19 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path != "/api/open":
             self._error("未找到该地址", HTTPStatus.NOT_FOUND)
+            return
+        origin = self.headers.get("Origin")
+        if origin:
+            port = int(getattr(self.server, "server_port"))
+            allowed_origins = {
+                f"http://127.0.0.1:{port}",
+                f"http://localhost:{port}",
+            }
+            if origin.rstrip("/") not in allowed_origins:
+                self._error("禁止跨站触发本机文件操作", HTTPStatus.FORBIDDEN)
+                return
+        if self.headers.get_content_type() != "application/json":
+            self._error("文件操作接口只接受 application/json", HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
             return
         try:
             body = self._read_json()
