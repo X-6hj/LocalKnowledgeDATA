@@ -174,6 +174,19 @@ code { padding: .08em .35em; border: 1px solid var(--line); border-radius: 4px; 
 }
 .current-folder-panel h3 { margin: 0; font-family: var(--display); font-size: 1.35rem; font-weight: 500; }
 .current-folder-panel p:not(.section-kicker) { margin: 7px 0 0; color: var(--muted); white-space: pre-line; font-size: .8rem; }
+.current-folder-content { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.current-folder-primary[hidden] { display: none; }
+.primary-entry {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 66px; padding: 11px 13px;
+  border: 1px solid rgba(96,222,234,.42); border-radius: 11px; background: linear-gradient(120deg, rgba(96,222,234,.12), rgba(255,180,95,.055));
+  color: var(--text); text-decoration: none; box-shadow: 0 10px 28px rgba(0,8,18,.12); transition: border-color .18s ease, transform .18s ease, background .18s ease;
+}
+.primary-entry:hover, .primary-entry:focus-visible { border-color: var(--cyan); background: linear-gradient(120deg, rgba(96,222,234,.18), rgba(255,180,95,.08)); transform: translateY(-2px); outline: none; }
+.primary-entry-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: rgba(96,222,234,.13); color: var(--cyan); font-family: var(--display); font-size: 1.1rem; }
+.primary-entry-copy { display: grid; min-width: 0; gap: 3px; }
+.primary-entry-copy strong { color: var(--text); font-size: .82rem; }
+.primary-entry-copy small { overflow: hidden; color: var(--muted); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.primary-entry-arrow { color: var(--cyan); font-size: .7rem; white-space: nowrap; }
 .current-folder-files { display: grid; align-content: start; gap: 5px; }
 
 .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
@@ -281,6 +294,8 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 26px
   .workspace { padding-top: 45px; }
   .catalog-toolbar { align-items: start; flex-direction: column; }
   .current-folder-panel { grid-template-columns: 1fr; }
+  .primary-entry { grid-template-columns: 38px minmax(0, 1fr); }
+  .primary-entry-arrow { display: none; }
   .view-tools { width: 100%; }
   .view-tools > * { flex: 1; min-width: 0; }
   .card-grid { grid-template-columns: 1fr; }

@@ -129,6 +129,16 @@ def _file_record(path: Path, library_dir: Path) -> dict[str, Any]:
     }
 
 
+def _select_primary_file(meta: dict[str, Any], files: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """选择本目录首选入口；显式 entry 优先，否则回退到首个 HTML。"""
+    requested = str(meta.get("entry") or "").strip()
+    if requested and "/" not in requested and "\\" not in requested:
+        for file in files:
+            if file["name"] == requested:
+                return file
+    return next((file for file in files if file["extension"] in {"html", "htm"}), None)
+
+
 def _integer(value: Any, default: int = 9999) -> int:
     text = str(value)
     return int(value) if text.lstrip("-").isdigit() else default
@@ -193,6 +203,7 @@ def _directory_record(folder: Path, library_dir: Path) -> dict[str, Any]:
         "pinned": bool(meta.get("pinned", False)),
         "order": _integer(meta.get("order", 9999)),
         "files": files,
+        "primary_file": _select_primary_file(meta, files),
         "file_types": sorted({file["extension"] for file in files}),
         "child_count": len(children),
         "descendant_count": 0,

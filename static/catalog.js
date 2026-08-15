@@ -182,6 +182,23 @@
     return row;
   }
 
+  function primaryEntry(file) {
+    const isHtml = ["html", "htm"].includes(file.extension);
+    const label = isHtml ? "打开学习笔记" : "打开首选资料";
+    const link = create("a", "primary-entry");
+    link.href = fileUrl(file.relative_path);
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.setAttribute("aria-label", `${label}：${file.name}`);
+    const copy = create("span", "primary-entry-copy");
+    copy.append(
+      create("strong", "", label),
+      create("small", "", file.name)
+    );
+    link.append(create("span", "primary-entry-icon", "↗"), copy, create("span", "primary-entry-arrow", "打开 →"));
+    return link;
+  }
+
   function renderFolderCard(folder, index) {
     const card = create("article", "knowledge-card folder-card");
     card.dataset.folderId = folder.id;
@@ -220,14 +237,19 @@
 
   function renderCurrentFolder() {
     const panel = byId("currentFolderPanel");
+    const primary = byId("currentFolderPrimary");
     const folder = folderByPath(Store.currentPath);
     if (!folder || Store.query) {
       panel.hidden = true;
+      primary.hidden = true;
+      primary.replaceChildren();
       return;
     }
     panel.hidden = false;
     byId("currentFolderTitle").textContent = folder.title;
     byId("currentFolderDescription").textContent = folder.description;
+    primary.hidden = !folder.primary_file;
+    primary.replaceChildren(...(folder.primary_file ? [primaryEntry(folder.primary_file)] : []));
     const files = byId("currentFolderFiles");
     const fragment = document.createDocumentFragment();
     folder.files.forEach((file) => fragment.append(fileRow(file)));
@@ -237,19 +259,21 @@
 
   function renderCatalog() {
     const folders = visibleFolders();
+    const current = folderByPath(Store.currentPath);
+    const hasCurrentFiles = Boolean(!Store.query && current && current.files.length);
     const grid = byId("cardGrid");
     const fragment = document.createDocumentFragment();
     folders.forEach((folder, index) => fragment.append(renderFolderCard(folder, index)));
     grid.replaceChildren(fragment);
     grid.setAttribute("aria-busy", "false");
     grid.hidden = folders.length === 0;
-    byId("emptyState").hidden = folders.length !== 0;
+    byId("emptyState").hidden = folders.length !== 0 || hasCurrentFiles;
     byId("visibleCount").textContent = folders.length;
-    const current = folderByPath(Store.currentPath);
     byId("catalogTitle").textContent = Store.query ? "全库搜索结果" : (current?.title || "全部目录");
     const filters = [Store.query && `关键词“${Store.query}”`, Store.type && `${Store.type.toUpperCase()} 格式`, Store.favoritesOnly && "已收藏"].filter(Boolean);
     const scope = Store.query ? "全库" : (current ? `“${current.title}”的直属目录` : "根目录");
-    byId("resultSummary").textContent = `${scope}显示 ${folders.length} 个目录${filters.length ? ` · ${filters.join(" · ")}` : ""}`;
+    const fileSummary = !Store.query && current?.files.length ? ` · ${current.files.length} 个直属文件` : "";
+    byId("resultSummary").textContent = `${scope}显示 ${folders.length} 个目录${fileSummary}${filters.length ? ` · ${filters.join(" · ")}` : ""}`;
     renderBreadcrumbs(); renderCurrentFolder();
   }
 

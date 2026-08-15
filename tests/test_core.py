@@ -19,6 +19,61 @@ from stop import stop_windows_process, stop_windows_project_processes
 
 
 class ScannerTests(unittest.TestCase):
+    def test_html_is_primary_file_without_hiding_other_direct_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / "library"
+            problem = library / "算法" / "Problem A - 示例"
+            problem.mkdir(parents=True)
+            (problem / "题解.html").write_text("<!doctype html><title>题解</title>", encoding="utf-8")
+            (problem / "题解.md").write_text("# 题解", encoding="utf-8")
+            (problem / "题解.cpp").write_text("// AC", encoding="utf-8")
+
+            catalog = scan_library(library)
+            folder = next(item for item in catalog["folders"] if item["path"] == "算法/Problem A - 示例")
+
+            self.assertEqual(folder["primary_file"]["name"], "题解.html")
+            self.assertEqual({file["name"] for file in folder["files"]}, {"题解.html", "题解.md", "题解.cpp"})
+
+    def test_entry_metadata_overrides_automatic_html_choice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / "library"
+            problem = library / "算法" / "Problem B - 示例"
+            problem.mkdir(parents=True)
+            (problem / "_说明.md").write_text("---\nentry: 复习版.html\n---\n", encoding="utf-8")
+            (problem / "完整题解.html").write_text("<!doctype html>", encoding="utf-8")
+            (problem / "复习版.html").write_text("<!doctype html>", encoding="utf-8")
+
+            catalog = scan_library(library)
+            folder = next(item for item in catalog["folders"] if item["path"] == "算法/Problem B - 示例")
+
+            self.assertEqual(folder["primary_file"]["name"], "复习版.html")
+
+    def test_folder_without_html_has_no_primary_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / "library"
+            problem = library / "算法" / "Problem C - 示例"
+            problem.mkdir(parents=True)
+            (problem / "题解.md").write_text("# 题解", encoding="utf-8")
+
+            catalog = scan_library(library)
+            folder = next(item for item in catalog["folders"] if item["path"] == "算法/Problem C - 示例")
+
+            self.assertIsNone(folder["primary_file"])
+
+    def test_entry_cannot_escape_its_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / "library"
+            problem = library / "算法" / "Problem D - 示例"
+            problem.mkdir(parents=True)
+            (problem / "_说明.md").write_text("---\nentry: ../外部.html\n---\n", encoding="utf-8")
+            (problem / "安全入口.html").write_text("<!doctype html>", encoding="utf-8")
+            (library / "算法" / "外部.html").write_text("<!doctype html>", encoding="utf-8")
+
+            catalog = scan_library(library)
+            folder = next(item for item in catalog["folders"] if item["path"] == "算法/Problem D - 示例")
+
+            self.assertEqual(folder["primary_file"]["name"], "安全入口.html")
+
     def test_empty_directory_changes_revision_and_catalog_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -187,7 +242,65 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(body, "标题\n正文")
 
 
+class StaticFrontendContractTests(unittest.TestCase):
+    def test_current_folder_exposes_primary_learning_entry(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        index = (project / "static" / "index.html").read_text(encoding="utf-8")
+        catalog_script = (project / "static" / "catalog.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="currentFolderPrimary"', index)
+        self.assertIn("folder.primary_file", catalog_script)
+        self.assertIn("打开学习笔记", catalog_script)
+
+    def test_learning_note_template_is_offline_and_csp_compatible(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        template = (project / "templates" / "学习笔记.html").read_text(encoding="utf-8")
+        note_css = (project / "static" / "note.css").read_text(encoding="utf-8")
+
+        self.assertIn('href="/static/note.css"', template)
+        self.assertNotIn("<script", template.lower())
+        self.assertNotIn("http://", template.lower())
+        self.assertNotIn("https://", template.lower())
+        self.assertNotIn("style=", template.lower())
+        self.assertIn("prefers-color-scheme", note_css)
+        self.assertIn("@media print", note_css)
+
+    def test_file_only_folder_does_not_show_empty_search_state(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        catalog_script = (project / "static" / "catalog.js").read_text(encoding="utf-8")
+
+        self.assertIn("hasCurrentFiles", catalog_script)
+        self.assertIn("current.files.length", catalog_script)
+
+
 class HttpSecurityTests(unittest.TestCase):
+    def test_library_html_uses_non_executable_content_security_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            note = base / "library" / "公开" / "note.html"
+            note.parent.mkdir(parents=True)
+            note.write_text("<!doctype html><title>Note</title>", encoding="utf-8")
+            server = create_server(base, "127.0.0.1", 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            try:
+                with opener.open(
+                    f"http://127.0.0.1:{server.server_address[1]}/files/%E5%85%AC%E5%BC%80/note.html",
+                    timeout=3,
+                ) as response:
+                    policy = response.headers["Content-Security-Policy"]
+                    content_type = response.headers["Content-Type"]
+                self.assertTrue(content_type.startswith("text/html"))
+                self.assertIn("script-src 'none'", policy)
+                self.assertIn("connect-src 'none'", policy)
+                self.assertIn("form-action 'none'", policy)
+                self.assertIn("style-src 'self'", policy)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
     def test_response_write_ignores_client_disconnect(self) -> None:
         class DisconnectingWriter:
             def __init__(self, error_type: type[OSError]) -> None:
@@ -312,7 +425,7 @@ class HttpSecurityTests(unittest.TestCase):
                     timeout=3,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["data"]["version"], "1.3.1")
+                self.assertEqual(payload["data"]["version"], "1.4.0")
             finally:
                 server.shutdown()
                 server.server_close()

@@ -22,7 +22,7 @@ from typing import Any
 from .kb_scanner import load_json_safe, scan_library
 
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 
 
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
@@ -221,15 +221,26 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         self.app.logger.info("HTTP %s - %s", self.address_string(), fmt % args)
 
-    def _security_headers(self) -> None:
+    def _security_headers(self, *, library_html: bool = False) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if library_html:
+            policy = (
+                "default-src 'none'; img-src 'self' data:; style-src 'self'; font-src 'self'; "
+                "script-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; "
+                "form-action 'none'; frame-ancestors 'none'"
+            )
+        else:
+            policy = (
+                "default-src 'self'; img-src 'self' data:; style-src 'self'; "
+                "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; "
+                "frame-ancestors 'none'"
+            )
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data:; style-src 'self'; "
-            "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+            policy,
         )
 
     def _json(self, payload: dict[str, Any], status: int = 200) -> None:
@@ -329,13 +340,19 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
     def _serve_library_file(self, relative: str) -> None:
         try:
             candidate = self.app.resolve_library_path(relative)
-            self._send_file(candidate, cache=False, allow_range=True)
+            self._send_file(candidate, cache=False, allow_range=True, library_file=True)
         except PermissionError:
             self._error("禁止访问该路径", HTTPStatus.FORBIDDEN)
         except FileNotFoundError:
             self._error("文件不存在，可能刚被移动或删除", HTTPStatus.NOT_FOUND)
 
-    def _send_file(self, path: Path, cache: bool, allow_range: bool = False) -> None:
+    def _send_file(
+        self,
+        path: Path,
+        cache: bool,
+        allow_range: bool = False,
+        library_file: bool = False,
+    ) -> None:
         size = path.stat().st_size
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         start, end, status = 0, max(0, size - 1), HTTPStatus.OK
@@ -363,7 +380,7 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
         if status == HTTPStatus.PARTIAL_CONTENT:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.send_header("Cache-Control", "private, max-age=0" if cache else "no-cache, no-store, must-revalidate")
-        self._security_headers()
+        self._security_headers(library_html=library_file and mime in {"text/html", "application/xhtml+xml"})
         self.end_headers()
         if length:
             with path.open("rb") as handle:
