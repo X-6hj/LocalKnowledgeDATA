@@ -3,6 +3,8 @@
   这只是离线安全与语义骨架，不是可直接换字复用的设计成品。
   新页面必须先阅读 docs/HTML学习笔记设计规范.md，并根据主题重做首屏构图、视觉锚点和章节节奏。
   禁止只替换标题、公式和代码；禁止默认照搬机械编号、英文眉题与统一卡片顺序。
+  如果存在用户 AC 代码，HTML 必须展示与 CPP 完全一致的完整代码，并另写整体执行流程；
+  函数级讲解保留在前面的“代码对应”部分，完整代码区不要重复逐行解释同一函数。
 -->
 <html lang="zh-CN">
 <head>
@@ -31,6 +33,7 @@
           <li><a href="#model">问题入口</a></li>
           <li><a href="#idea">推导主线</a></li>
           <li><a href="#code">代码对应</a></li>
+          <li><a href="#full-code">完整代码</a></li>
           <li><a href="#review">复习提醒</a></li>
         </ol>
       </nav>
@@ -50,9 +53,22 @@
 
         <section id="code" class="note-section">
           <h2>与实际代码对应</h2>
-          <pre><code>// 只摘录最值得复现的核心片段
+          <pre><code>// 只摘录最值得复现的核心函数或片段
 </code></pre>
-          <p>完整 AC 代码作为同目录独立文件保留，不擅自改写。</p>
+          <p>这里解释关键函数、变量或控制流；不要等到完整代码区再重复讲一遍。</p>
+        </section>
+
+        <section id="full-code" class="note-section">
+          <h2>完整 AC 代码</h2>
+          <p>先从程序层面说明数据如何流过初始化、预处理、核心算法和输出；已有函数讲解只引用结论，不重复逐行复述。</p>
+          <dl class="code-overview" aria-label="整体执行流程">
+            <div><dt>输入与状态</dt><dd>说明主要容器、全局状态及每组数据如何重置。</dd></div>
+            <div><dt>整体执行流程</dt><dd>按真实调用顺序概括 solve() 如何组织各阶段。</dd></div>
+            <div><dt>输出与边界</dt><dd>说明答案如何形成，以及复杂度、递归或边界风险。</dd></div>
+          </dl>
+          <div class="code-source"><strong>完整 AC 代码</strong><span>必须与同目录 CPP 内容一致，只做 HTML 字符转义</span></div>
+          <pre class="complete-code"><code>// 在这里放入同目录 CPP 的全部内容，不删 include，不调整空行，不改写风格
+</code></pre>
         </section>
 
         <section id="review" class="note-section">

@@ -123,6 +123,14 @@ pre {
   tab-size: 4;
 }
 pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }
+.code-overview { display: grid; gap: 0; margin: 18px 0 24px; border-top: 1px solid var(--line); }
+.code-overview > div { display: grid; grid-template-columns: minmax(7rem, .34fr) 1fr; gap: 18px; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+.code-overview dt { color: var(--warm); font-weight: 800; }
+.code-overview dd { margin: 0; color: var(--muted); }
+.code-source { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 26px 2px 8px; }
+.code-source strong { color: var(--ink); font-family: var(--serif); font-size: 1.04rem; }
+.code-source span { color: var(--muted); font-size: .72rem; text-align: right; }
+.complete-code { margin-top: 8px; border-color: color-mix(in srgb, var(--accent) 42%, transparent); border-radius: 6px 14px 14px 14px; box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent); }
 .quick-card { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .quick-card li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 12px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
 .quick-card strong { color: var(--warm); }
@@ -139,6 +147,9 @@ pre code { padding: 0; background: transparent; color: inherit; font-size: inher
   .toc { position: static; }
   .flow { grid-template-columns: 1fr; }
   .quick-card li { grid-template-columns: 1fr; gap: 1px; }
+  .code-overview > div { grid-template-columns: 1fr; gap: 2px; }
+  .code-source { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .code-source span { text-align: left; }
   .note-section { padding: 21px 17px; }
 }
 

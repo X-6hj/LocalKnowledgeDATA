@@ -264,6 +264,11 @@ class StaticFrontendContractTests(unittest.TestCase):
         self.assertNotIn("style=", template.lower())
         self.assertIn("prefers-color-scheme", note_css)
         self.assertIn("@media print", note_css)
+        self.assertIn('id="full-code"', template)
+        self.assertIn("完整 AC 代码", template)
+        self.assertIn("整体执行流程", template)
+        self.assertIn('class="complete-code"', template)
+        self.assertIn(".complete-code", note_css)
 
     def test_file_only_folder_does_not_show_empty_search_state(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -425,7 +430,7 @@ class HttpSecurityTests(unittest.TestCase):
                     timeout=3,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["data"]["version"], "1.4.0")
+                self.assertEqual(payload["data"]["version"], "1.4.1")
             finally:
                 server.shutdown()
                 server.server_close()

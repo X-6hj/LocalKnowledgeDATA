@@ -22,7 +22,7 @@ from typing import Any
 from .kb_scanner import load_json_safe, scan_library
 
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
