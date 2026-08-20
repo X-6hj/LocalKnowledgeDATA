@@ -33,6 +33,7 @@ body.theme-centroid { --accent: #36785f; --accent-soft: #e1eee6; --warm: #a85b2c
 a { color: var(--accent); text-underline-offset: .2em; }
 a:hover { color: var(--warm); }
 a:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
+.formula:focus-visible, pre:focus-visible, .table-scroll:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
 
 .note-shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 64px; }
 .note-header {
@@ -102,9 +103,12 @@ h1 { position: relative; z-index: 1; max-width: 850px; margin: 0; font-size: cla
   text-align: center;
   white-space: pre;
 }
+.formula svg { display: block; max-width: 100%; margin: 0 auto 6px; }
 .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
 .flow > div { padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); text-align: center; }
 .flow b { display: block; color: var(--accent); }
+.table-scroll { max-width: 100%; margin: 16px 0; overflow-x: auto; }
+.table-scroll .compare { min-width: 620px; margin: 0; }
 .compare { width: 100%; border-collapse: collapse; margin: 16px 0; }
 .compare th, .compare td { padding: 10px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
 .compare th { background: var(--accent-soft); }
