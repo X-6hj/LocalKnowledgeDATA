@@ -171,19 +171,104 @@
     byId("resetFilters").addEventListener("click", resetFilters);
   }
 
+  const STRUCTURE_WIDTH_KEY = "kb:structure-width";
+  const STRUCTURE_DEFAULT_WIDTH = 570;
+  const STRUCTURE_MIN_WIDTH = 420;
+  const STRUCTURE_MAX_WIDTH = 960;
+  const STRUCTURE_VIEWPORT_GAP = 80;
+
+  function setupStructureResize(dialog) {
+    const handle = byId("structureResizeHandle");
+    let activePointerId = null;
+    const savedWidth = Number(localStorage.getItem(STRUCTURE_WIDTH_KEY));
+    let currentWidth = Number.isFinite(savedWidth) && savedWidth > 0 ? savedWidth : STRUCTURE_DEFAULT_WIDTH;
+
+    const widthBounds = () => {
+      const maximum = Math.max(320, Math.min(STRUCTURE_MAX_WIDTH, window.innerWidth - STRUCTURE_VIEWPORT_GAP));
+      return { minimum: Math.min(STRUCTURE_MIN_WIDTH, maximum), maximum };
+    };
+
+    const applyWidth = (nextWidth, persist = false) => {
+      const { minimum, maximum } = widthBounds();
+      currentWidth = Math.round(Math.min(maximum, Math.max(minimum, Number(nextWidth) || STRUCTURE_DEFAULT_WIDTH)));
+      dialog.style.setProperty("--structure-dialog-width", `${currentWidth}px`);
+      handle.setAttribute("aria-valuemin", String(minimum));
+      handle.setAttribute("aria-valuemax", String(maximum));
+      handle.setAttribute("aria-valuenow", String(currentWidth));
+      if (persist) localStorage.setItem(STRUCTURE_WIDTH_KEY, String(currentWidth));
+    };
+
+    const resizeEnabled = () => !window.matchMedia("(max-width: 680px)").matches;
+    const syncResizeAvailability = () => {
+      const enabled = resizeEnabled();
+      handle.tabIndex = enabled ? 0 : -1;
+      handle.setAttribute("aria-disabled", String(!enabled));
+      if (enabled) applyWidth(currentWidth);
+    };
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (!resizeEnabled() || event.button !== 0) return;
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      handle.setPointerCapture(event.pointerId);
+      document.body.classList.add("structure-resizing");
+    });
+    handle.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== activePointerId) return;
+      applyWidth(window.innerWidth - event.clientX);
+    });
+    const finishResize = (event) => {
+      if (event.pointerId !== activePointerId) return;
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      activePointerId = null;
+      document.body.classList.remove("structure-resizing");
+      applyWidth(currentWidth, true);
+    };
+    handle.addEventListener("pointerup", finishResize);
+    handle.addEventListener("pointercancel", finishResize);
+    handle.addEventListener("keydown", (event) => {
+      const step = event.shiftKey ? 80 : 32;
+      const { minimum, maximum } = widthBounds();
+      let nextWidth = null;
+      if (event.key === "ArrowLeft") nextWidth = currentWidth + step;
+      if (event.key === "ArrowRight") nextWidth = currentWidth - step;
+      if (event.key === "Home") nextWidth = minimum;
+      if (event.key === "End") nextWidth = maximum;
+      if (nextWidth === null) return;
+      event.preventDefault();
+      applyWidth(nextWidth, true);
+    });
+    handle.addEventListener("dblclick", () => applyWidth(STRUCTURE_DEFAULT_WIDTH, true));
+    window.addEventListener("resize", syncResizeAvailability);
+    applyWidth(currentWidth);
+    syncResizeAvailability();
+  }
+
+  function expandCurrentStructurePath() {
+    let path = Store.currentPath;
+    while (path) {
+      Store.structureExpanded.add(path);
+      path = Store.indexes.byPath.get(path)?.parent_path || "";
+    }
+  }
+
+  function revealCurrentStructure(dialog, { behavior = "auto", focus = false } = {}) {
+    expandCurrentStructurePath();
+    renderGlobalStructure();
+    if (!Store.currentPath) return;
+    requestAnimationFrame(() => {
+      const current = dialog.querySelector('[aria-current="page"]');
+      current?.scrollIntoView({ block: "center", behavior });
+      if (focus) current?.focus({ preventScroll: true });
+    });
+  }
+
   function setupGlobalStructure() {
     const dialog = byId("structureDialog");
     const opener = byId("structureOpen");
     const search = byId("structureSearch");
     let initialized = false;
-
-    const expandCurrentPath = () => {
-      let path = Store.currentPath;
-      while (path) {
-        Store.structureExpanded.add(path);
-        path = Store.indexes.byPath.get(path)?.parent_path || "";
-      }
-    };
+    setupStructureResize(dialog);
 
     opener.addEventListener("click", () => {
       hideTooltip();
@@ -192,16 +277,15 @@
           if (folder.child_count) Store.structureExpanded.add(folder.path);
         });
         initialized = true;
-      } else {
-        expandCurrentPath();
       }
       dialog.showModal();
-      renderGlobalStructure();
-      search.focus();
+      revealCurrentStructure(dialog);
+      search.focus({ preventScroll: true });
     });
 
     search.addEventListener("input", (event) => {
       Store.structureQuery = event.target.value;
+      Store.structureSearchCollapsed.clear();
       renderGlobalStructure();
     });
 
@@ -216,26 +300,34 @@
     });
 
     byId("structureExpandCurrent").addEventListener("click", () => {
-      expandCurrentPath();
-      renderGlobalStructure();
-      const current = dialog.querySelector('[aria-current="page"]');
-      current?.scrollIntoView({ block: "center", behavior: "smooth" });
-      current?.focus({ preventScroll: true });
+      Store.structureQuery = "";
+      Store.structureSearchCollapsed.clear();
+      search.value = "";
+      revealCurrentStructure(dialog, { behavior: "smooth", focus: true });
     });
 
     byId("structureExpandAll").addEventListener("click", () => {
-      Store.catalog.folders.forEach((folder) => {
-        if (folder.child_count || (Store.structureShowFiles && folder.files.length)) {
-          Store.structureExpanded.add(folder.path);
-        }
-      });
+      if (Store.structureQuery.trim()) {
+        Store.structureSearchCollapsed.clear();
+      } else {
+        Store.catalog.folders.forEach((folder) => {
+          if (folder.child_count || (Store.structureShowFiles && folder.files.length)) {
+            Store.structureExpanded.add(folder.path);
+          }
+        });
+      }
       renderGlobalStructure();
     });
 
     byId("structureCollapseAll").addEventListener("click", () => {
-      Store.structureExpanded.clear();
-      Store.structureQuery = "";
-      search.value = "";
+      if (Store.structureQuery.trim()) {
+        Store.structureSearchCollapsed.clear();
+        Store.catalog.folders.forEach((folder) => {
+          if (folder.child_count || folder.files.length) Store.structureSearchCollapsed.add(folder.path);
+        });
+      } else {
+        Store.structureExpanded.clear();
+      }
       renderGlobalStructure();
       search.focus();
     });
@@ -245,8 +337,9 @@
       if (!action) return;
       if (action.dataset.action === "structure-toggle") {
         const path = action.dataset.path;
-        if (Store.structureExpanded.has(path)) Store.structureExpanded.delete(path);
-        else Store.structureExpanded.add(path);
+        const state = Store.structureQuery.trim() ? Store.structureSearchCollapsed : Store.structureExpanded;
+        if (state.has(path)) state.delete(path);
+        else state.add(path);
         renderGlobalStructure();
         dialog.querySelector(`[data-action="structure-toggle"][data-path="${CSS.escape(path)}"]`)?.focus();
       }
@@ -261,6 +354,7 @@
     });
     dialog.addEventListener("close", () => {
       Store.structureQuery = "";
+      Store.structureSearchCollapsed.clear();
       search.value = "";
       byId("structureTree").replaceChildren();
       opener.focus();

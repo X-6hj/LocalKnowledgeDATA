@@ -119,6 +119,18 @@
   </div>
 
   <dialog id="structureDialog" class="structure-dialog" aria-labelledby="structureTitle" aria-describedby="structureSummary">
+    <div
+      id="structureResizeHandle"
+      class="structure-resize-handle"
+      role="separator"
+      aria-label="调整全库星图宽度"
+      aria-orientation="vertical"
+      aria-valuemin="420"
+      aria-valuemax="960"
+      aria-valuenow="570"
+      tabindex="0"
+      title="拖动调整宽度；也可使用左右方向键"
+    ></div>
     <div class="structure-shell">
       <header class="structure-header">
         <div class="structure-identity">
@@ -156,7 +168,7 @@
         <div class="structure-guide" aria-hidden="true"><span>ROOT</span><i></i><span>DEEP SPACE</span></div>
         <nav id="structureTree" class="structure-tree" aria-label="知识库完整目录树"></nav>
       </div>
-      <p class="structure-hint">展开箭头用于查看下级；选择目录名称会跳转，并保持原有逐级浏览方式。</p>
+      <p class="structure-hint"><span class="structure-resize-hint">拖动左边缘可调整宽度；</span>展开箭头用于查看下级；选择目录名称会跳转。</p>
     </div>
   </dialog>
 

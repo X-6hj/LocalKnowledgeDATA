@@ -21,6 +21,7 @@
     structureQuery: "",
     structureShowFiles: false,
     structureExpanded: new Set(),
+    structureSearchCollapsed: new Set(),
     favorites: loadFavorites(),
     indexes: {
       byPath: new Map(),
@@ -146,7 +147,9 @@
     const hasChildren = queryActive
       ? childFolders.length > 0 || files.length > 0
       : folder.child_count > 0 || (Store.structureShowFiles && folder.files.length > 0);
-    const expanded = hasChildren && (queryActive || Store.structureExpanded.has(folder.path));
+    const expanded = hasChildren && (queryActive
+      ? !Store.structureSearchCollapsed.has(folder.path)
+      : Store.structureExpanded.has(folder.path));
 
     const row = create("div", "structure-row" + (Store.currentPath === folder.path ? " current" : ""));
     const toggle = create("button", "structure-node-toggle", hasChildren ? "" : "·");
@@ -225,7 +228,7 @@
     }
     host.replaceChildren(tree);
     byId("structureSummary").textContent = query
-      ? `找到 ${matches} 个匹配目录，已展开 ${visiblePaths?.size || 0} 个相关坐标。`
+      ? `找到 ${matches} 个匹配目录，显示 ${visiblePaths?.size || 0} 个相关坐标。`
       : `${Store.catalog.stats.folders} 个目录 · ${Store.catalog.stats.files} 个文件 · 最深 ${Store.catalog.stats.max_depth} 层`;
   }
 

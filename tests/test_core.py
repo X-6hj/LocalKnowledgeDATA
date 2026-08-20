@@ -339,6 +339,28 @@ class StaticFrontendContractTests(unittest.TestCase):
         self.assertIn(".structure-scroll { display: block; padding: 9px 8px 8px; overflow: hidden; }", style)
         self.assertIn(".structure-tree { height: 100%;", style)
 
+    def test_complete_structure_supports_resize_search_folding_and_current_reveal(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        index = (project / "static" / "index.html").read_text(encoding="utf-8")
+        catalog_script = (project / "static" / "catalog.js").read_text(encoding="utf-8")
+        app_script = (project / "static" / "app.js").read_text(encoding="utf-8")
+        style = (project / "static" / "style.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="structureResizeHandle"', index)
+        self.assertIn('role="separator"', index)
+        self.assertIn('aria-orientation="vertical"', index)
+        self.assertIn("structureSearchCollapsed: new Set()", catalog_script)
+        self.assertIn("Store.structureSearchCollapsed.has(folder.path)", catalog_script)
+        self.assertIn("function setupStructureResize", app_script)
+        self.assertIn('"kb:structure-width"', app_script)
+        self.assertIn("setPointerCapture", app_script)
+        self.assertIn('setAttribute("aria-valuenow"', app_script)
+        self.assertIn("function revealCurrentStructure", app_script)
+        self.assertIn('scrollIntoView({ block: "center"', app_script)
+        self.assertIn("--structure-dialog-width", style)
+        self.assertIn(".structure-resize-handle", style)
+        self.assertIn(".structure-resize-hint { display: none; }", style)
+
     def test_learning_note_template_is_offline_and_csp_compatible(self) -> None:
         project = Path(__file__).resolve().parents[1]
         template = (project / "templates" / "学习笔记.html").read_text(encoding="utf-8")
@@ -517,7 +539,7 @@ class HttpSecurityTests(unittest.TestCase):
                     timeout=3,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["data"]["version"], "1.5.0")
+                self.assertEqual(payload["data"]["version"], "1.5.1")
             finally:
                 server.shutdown()
                 server.server_close()

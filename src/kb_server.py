@@ -23,7 +23,7 @@ from .kb_scanner import load_json_safe, scan_library
 from .knowledge_structure import SNAPSHOT_FILENAME, write_structure_snapshot
 
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 
 
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
