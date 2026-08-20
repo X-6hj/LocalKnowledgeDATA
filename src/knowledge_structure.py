@@ -11,7 +11,11 @@ SNAPSHOT_FILENAME = "KNOWLEDGE_STRUCTURE.md"
 
 
 def _one_line(value: Any, limit: int = 96) -> str:
-    safe = "".join(character for character in str(value or "") if unicodedata.category(character) != "Cc")
+    safe = "".join(
+        " " if character.isspace() else character
+        for character in str(value or "")
+        if unicodedata.category(character) != "Cc" or character.isspace()
+    )
     text = " ".join(safe.split()).replace("`", "ˋ")
     if len(text) <= limit:
         return text

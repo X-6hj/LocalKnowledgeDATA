@@ -79,7 +79,7 @@ class KnowledgeBaseApp:
         self._stop_event.set()
         thread = self._refresh_thread
         if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=2)
+            thread.join()
         self._refresh_thread = None
         for handler in list(self.logger.handlers):
             handler.close()
