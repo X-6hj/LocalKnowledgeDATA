@@ -4,8 +4,10 @@ __pycache__/
 # Portable Windows Python needs native extension modules despite *.pyd matching above.
 !runtime/windows-python/*.pyd
 
-# Runtime state and logs
+# Runtime state, generated overview and logs
 .server.pid
+/KNOWLEDGE_STRUCTURE.md
+/.KNOWLEDGE_STRUCTURE.md.*.tmp
 logs/*.log*
 
 # Personal knowledge files are private by default. Only the exact reviewed files

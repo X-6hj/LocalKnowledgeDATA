@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -95,8 +97,60 @@ class ScannerTests(unittest.TestCase):
             (library / "主题" / "已重命名").rmdir()
             fourth = app.catalog()
             self.assertNotEqual(third["revision"], fourth["revision"])
+            self.assertIn("主题/已重命名", {folder["path"] for folder in third["folders"]})
             self.assertNotIn("主题/已重命名", {folder["path"] for folder in fourth["folders"]})
             app.close()
+
+    def test_server_startup_creates_fixed_global_structure_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            topic = base / "library" / "算法" / "数论"
+            topic.mkdir(parents=True)
+            (topic / "_说明.md").write_text("---\nsummary: 整数算法。\n---\n", encoding="utf-8")
+            (topic / "欧几里得.cpp").write_text("// gcd", encoding="utf-8")
+
+            server = create_server(base, "127.0.0.1", 0)
+            try:
+                snapshot = base / "KNOWLEDGE_STRUCTURE.md"
+                self.assertTrue(snapshot.is_file())
+                text = snapshot.read_text(encoding="utf-8")
+                self.assertIn("library/", text)
+                self.assertIn("算法/", text)
+                self.assertIn("数论/", text)
+                self.assertIn("欧几里得.cpp", text)
+                self.assertIn("整数算法。", text)
+            finally:
+                server.server_close()
+
+    def test_structure_snapshot_failure_does_not_make_catalog_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "library" / "算法").mkdir(parents=True)
+            app = KnowledgeBaseApp(base)
+            try:
+                with patch("src.kb_server.write_structure_snapshot", side_effect=OSError("只读目录")):
+                    catalog = app.catalog()
+                self.assertEqual(catalog["stats"]["folders"], 1)
+            finally:
+                app.close()
+
+    def test_structure_snapshot_can_be_regenerated_without_starting_server(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "library" / "课程" / "C++").mkdir(parents=True)
+            script = Path(__file__).resolve().parents[1] / "generate_structure.py"
+
+            result = subprocess.run(
+                [sys.executable, str(script), "--base-dir", str(base)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("KNOWLEDGE_STRUCTURE.md", result.stdout)
+            self.assertIn("C++/", (base / "KNOWLEDGE_STRUCTURE.md").read_text(encoding="utf-8"))
 
     def test_hidden_ancestors_are_pruned(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -243,6 +297,12 @@ class ScannerTests(unittest.TestCase):
 
 
 class StaticFrontendContractTests(unittest.TestCase):
+    def test_generated_structure_snapshot_is_private_runtime_output(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        gitignore = (project / ".gitignore").read_text(encoding="utf-8")
+
+        self.assertIn("/KNOWLEDGE_STRUCTURE.md", gitignore)
+
     def test_current_folder_exposes_primary_learning_entry(self) -> None:
         project = Path(__file__).resolve().parents[1]
         index = (project / "static" / "index.html").read_text(encoding="utf-8")
@@ -251,6 +311,33 @@ class StaticFrontendContractTests(unittest.TestCase):
         self.assertIn('id="currentFolderPrimary"', index)
         self.assertIn("folder.primary_file", catalog_script)
         self.assertIn("打开学习笔记", catalog_script)
+
+    def test_page_exposes_searchable_complete_structure_without_replacing_local_navigation(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        index = (project / "static" / "index.html").read_text(encoding="utf-8")
+        catalog_script = (project / "static" / "catalog.js").read_text(encoding="utf-8")
+        app_script = (project / "static" / "app.js").read_text(encoding="utf-8")
+        style = (project / "static" / "style.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="structureOpen"', index)
+        self.assertIn('<dialog id="structureDialog"', index)
+        self.assertIn('id="structureTree"', index)
+        self.assertIn('id="structureSearch"', index)
+        self.assertIn('id="structureFileToggle"', index)
+        self.assertIn('id="categoryList"', index)
+        self.assertNotIn('id="globalStructurePanel"', index)
+        self.assertIn("function renderGlobalStructure", catalog_script)
+        self.assertIn("structureExpanded", catalog_script)
+        self.assertIn("data-structure-path", catalog_script)
+        self.assertIn("function setupGlobalStructure", app_script)
+        self.assertIn("showModal()", app_script)
+        self.assertIn("let initialized = false", app_script)
+        self.assertIn("if (!initialized)", app_script)
+        self.assertIn("if (Store.structureShowFiles)", app_script)
+        self.assertIn("if (folder.files.length) Store.structureExpanded.add(folder.path)", app_script)
+        self.assertIn("enterFolder(action.dataset.path)", app_script)
+        self.assertIn(".structure-scroll { display: block; padding: 9px 8px 8px; overflow: hidden; }", style)
+        self.assertIn(".structure-tree { height: 100%;", style)
 
     def test_learning_note_template_is_offline_and_csp_compatible(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -430,7 +517,7 @@ class HttpSecurityTests(unittest.TestCase):
                     timeout=3,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["data"]["version"], "1.4.1")
+                self.assertEqual(payload["data"]["version"], "1.5.0")
             finally:
                 server.shutdown()
                 server.server_close()

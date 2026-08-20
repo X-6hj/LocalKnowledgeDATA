@@ -20,9 +20,10 @@ from pathlib import Path
 from typing import Any
 
 from .kb_scanner import load_json_safe, scan_library
+from .knowledge_structure import SNAPSHOT_FILENAME, write_structure_snapshot
 
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 
 
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
@@ -51,6 +52,7 @@ class KnowledgeBaseApp:
         self.library_dir = (self.base_dir / "library").resolve()
         self.static_dir = (self.base_dir / "static").resolve()
         self.config_path = self.base_dir / "config.json"
+        self.structure_snapshot_path = self.base_dir / SNAPSHOT_FILENAME
         self._cache_lock = threading.Lock()
         self._catalog: dict[str, Any] | None = None
         self._revision = ""
@@ -92,6 +94,11 @@ class KnowledgeBaseApp:
             if self._catalog is None or fresh["revision"] != self._revision:
                 self._catalog = fresh
                 self._revision = fresh["revision"]
+                try:
+                    write_structure_snapshot(self.structure_snapshot_path, fresh)
+                except OSError as exc:
+                    # 快照是辅助索引；磁盘只读或被占用时仍应保证网页目录可用。
+                    self.logger.warning("无法更新全局结构快照：%s", exc)
                 self.logger.info(
                     "索引已更新：%s 个分类，%s 个条目，%s 个文件",
                     fresh["stats"]["categories"], fresh["stats"]["items"], fresh["stats"]["files"]
@@ -399,4 +406,5 @@ def create_server(base_dir: Path, host: str = "127.0.0.1", port: int = 8765) -> 
     app = KnowledgeBaseApp(base_dir)
     server = ReuseThreadingHTTPServer((host, port), KnowledgeBaseHandler)
     server.app = app  # type: ignore[attr-defined]
+    app.catalog()
     return server

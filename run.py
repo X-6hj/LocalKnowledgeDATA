@@ -86,6 +86,7 @@ def main() -> int:
     print("  拾页星图 · 本地知识库")
     print(f"  地址：http://127.0.0.1:{args.port}")
     print("  资料目录：library/")
+    print("  全局结构：KNOWLEDGE_STRUCTURE.md（自动按需覆盖）")
     print("  按 Ctrl+C 停止服务")
     print("=" * 54)
     try:

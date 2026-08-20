@@ -71,6 +71,9 @@
           <p id="resultSummary" class="result-summary" aria-live="polite">正在读取本地目录…</p>
         </div>
         <div class="view-tools" aria-label="显示选项">
+          <button id="structureOpen" class="tool-button structure-open" type="button" aria-haspopup="dialog" disabled>
+            <span aria-hidden="true">⌘</span> 结构总览 <small id="structureOpenCount">—</small>
+          </button>
           <button id="favoriteFilter" class="tool-button" type="button" aria-pressed="false">☆ 仅看收藏</button>
           <select id="sortSelect" aria-label="排序方式">
             <option value="default">推荐顺序</option>
@@ -114,6 +117,48 @@
     <p id="hoverDescription"></p>
     <div id="hoverMeta" class="hover-meta"></div>
   </div>
+
+  <dialog id="structureDialog" class="structure-dialog" aria-labelledby="structureTitle" aria-describedby="structureSummary">
+    <div class="structure-shell">
+      <header class="structure-header">
+        <div class="structure-identity">
+          <span class="structure-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div>
+            <p class="section-kicker">ATLAS OVERVIEW · 全库星图</p>
+            <h2 id="structureTitle">完整知识结构</h2>
+            <p id="structureSummary" role="status" aria-live="polite">正在读取知识坐标…</p>
+          </div>
+        </div>
+        <form method="dialog"><button class="dialog-close structure-close" aria-label="关闭完整知识结构">×</button></form>
+      </header>
+
+      <div class="structure-toolbar" aria-label="结构总览工具">
+        <label class="structure-search" for="structureSearch">
+          <span aria-hidden="true">⌕</span>
+          <span class="sr-only">在完整知识结构中定位目录或文件</span>
+          <input id="structureSearch" type="search" autocomplete="off" placeholder="在结构中定位目录或文件…">
+          <kbd aria-hidden="true">Esc</kbd>
+        </label>
+        <div class="structure-options">
+          <label class="structure-file-toggle" for="structureFileToggle">
+            <input id="structureFileToggle" type="checkbox">
+            <span>显示直属文件</span>
+          </label>
+          <div class="structure-expand-tools" aria-label="展开范围">
+            <button id="structureExpandCurrent" type="button">展开当前位置</button>
+            <button id="structureExpandAll" type="button">全部展开</button>
+            <button id="structureCollapseAll" type="button">仅看根级</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="structure-scroll">
+        <div class="structure-guide" aria-hidden="true"><span>ROOT</span><i></i><span>DEEP SPACE</span></div>
+        <nav id="structureTree" class="structure-tree" aria-label="知识库完整目录树"></nav>
+      </div>
+      <p class="structure-hint">展开箭头用于查看下级；选择目录名称会跳转，并保持原有逐级浏览方式。</p>
+    </div>
+  </dialog>
 
 
   <dialog id="helpDialog" class="detail-dialog help-dialog" aria-labelledby="helpTitle">

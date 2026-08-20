@@ -18,6 +18,9 @@
     type: "",
     favoritesOnly: false,
     sort: "default",
+    structureQuery: "",
+    structureShowFiles: false,
+    structureExpanded: new Set(),
     favorites: loadFavorites(),
     indexes: {
       byPath: new Map(),
@@ -109,6 +112,121 @@
     fragment.append(navigationButton(root));
     (Store.indexes.childrenByParent.get("") || []).forEach((folder) => fragment.append(navigationButton(folder)));
     list.replaceChildren(fragment);
+  }
+
+  function structureSearchState() {
+    const query = normalize(Store.structureQuery).trim();
+    if (!query) return { query, visiblePaths: null, matches: 0 };
+    const visible = new Set();
+    let matches = 0;
+    const visit = (folder) => {
+      let childMatch = false;
+      (Store.indexes.childrenByParent.get(folder.path) || []).forEach((child) => {
+        if (visit(child)) childMatch = true;
+      });
+      const selfMatch = (Store.indexes.searchTextById.get(folder.id) || "").includes(query);
+      if (selfMatch) matches += 1;
+      if (selfMatch || childMatch) visible.add(folder.path);
+      return selfMatch || childMatch;
+    };
+    (Store.indexes.childrenByParent.get("") || []).forEach(visit);
+    return { query, visiblePaths: visible, matches };
+  }
+
+  function structureFolderNode(folder, searchState) {
+    const { query, visiblePaths } = searchState;
+    const queryActive = Boolean(query);
+    const item = create("li", "structure-node");
+
+    const childFolders = (Store.indexes.childrenByParent.get(folder.path) || [])
+      .filter((child) => !visiblePaths || visiblePaths.has(child.path));
+    const files = queryActive
+      ? folder.files.filter((file) => normalize(file.name).includes(query))
+      : (Store.structureShowFiles ? folder.files : []);
+    const hasChildren = queryActive
+      ? childFolders.length > 0 || files.length > 0
+      : folder.child_count > 0 || (Store.structureShowFiles && folder.files.length > 0);
+    const expanded = hasChildren && (queryActive || Store.structureExpanded.has(folder.path));
+
+    const row = create("div", "structure-row" + (Store.currentPath === folder.path ? " current" : ""));
+    const toggle = create("button", "structure-node-toggle", hasChildren ? "" : "·");
+    toggle.type = "button";
+    toggle.disabled = !hasChildren;
+    toggle.dataset.action = "structure-toggle";
+    toggle.dataset.path = folder.path;
+    if (hasChildren) {
+      toggle.setAttribute("aria-expanded", String(expanded));
+      toggle.setAttribute("aria-label", `${expanded ? "折叠" : "展开"}“${folder.title}”`);
+    } else {
+      toggle.setAttribute("aria-hidden", "true");
+      toggle.tabIndex = -1;
+    }
+
+    const link = create("button", "structure-link");
+    link.type = "button";
+    link.dataset.action = "structure-enter";
+    link.dataset.path = folder.path;
+    link.setAttribute("data-structure-path", folder.path);
+    if (Store.currentPath === folder.path) link.setAttribute("aria-current", "page");
+    link.append(
+      create("span", "structure-node-icon", folder.icon),
+      create("span", "structure-node-title", folder.title)
+    );
+    if (Store.currentPath === folder.path) link.append(create("span", "structure-current", "当前位置"));
+    const count = create(
+      "span",
+      "structure-node-count",
+      `${folder.child_count} 分支 · ${folder.descendant_file_count} 文件`
+    );
+    row.append(toggle, link, count);
+    item.append(row);
+
+    if (expanded) {
+      const group = create("ul", "structure-group");
+      childFolders.forEach((child) => group.append(structureFolderNode(child, searchState)));
+      files.forEach((file) => {
+        const fileItem = create("li", "structure-file");
+        const fileLink = create("a", "structure-file-link");
+        fileLink.href = fileUrl(file.relative_path);
+        fileLink.target = "_blank";
+        fileLink.rel = "noopener";
+        fileLink.append(
+          create("span", "structure-file-type", file.extension.slice(0, 4)),
+          create("span", "structure-file-name", file.name),
+          create("span", "structure-file-open", "↗")
+        );
+        fileLink.setAttribute("aria-label", `在新标签页打开 ${file.name}`);
+        fileItem.append(fileLink);
+        group.append(fileItem);
+      });
+      item.append(group);
+    }
+    return item;
+  }
+
+  function renderGlobalStructure() {
+    const host = byId("structureTree");
+    if (!host || !Store.catalog) return;
+    byId("structureOpen").disabled = false;
+    byId("structureOpenCount").textContent = String(Store.catalog.stats.folders);
+    const dialog = byId("structureDialog");
+    if (!dialog?.open) {
+      host.replaceChildren();
+      return;
+    }
+    const searchState = structureSearchState();
+    const { query, visiblePaths, matches } = searchState;
+    const roots = (Store.indexes.childrenByParent.get("") || [])
+      .filter((folder) => !visiblePaths || visiblePaths.has(folder.path));
+    const tree = create("ul", "structure-root");
+    roots.forEach((folder) => tree.append(structureFolderNode(folder, searchState)));
+    if (!roots.length) {
+      tree.append(create("li", "structure-empty", "没有与当前关键词匹配的目录或文件。"));
+    }
+    host.replaceChildren(tree);
+    byId("structureSummary").textContent = query
+      ? `找到 ${matches} 个匹配目录，已展开 ${visiblePaths?.size || 0} 个相关坐标。`
+      : `${Store.catalog.stats.folders} 个目录 · ${Store.catalog.stats.files} 个文件 · 最深 ${Store.catalog.stats.max_depth} 层`;
   }
 
   function renderBreadcrumbs() {
@@ -280,7 +398,7 @@
   function renderAll() {
     if (!Store.catalog) return;
     rebuildFolderIndexes();
-    renderStats(); renderCategories(); renderTypes(); renderCatalog();
+    renderStats(); renderCategories(); renderGlobalStructure(); renderTypes(); renderCatalog();
   }
 
   function enterFolder(path) {
@@ -289,12 +407,13 @@
     byId("searchInput").value = "";
     byId("clearSearch").hidden = true;
     renderCategories(); renderCatalog();
+    renderGlobalStructure();
     byId("content").focus({ preventScroll: true });
   }
 
   function findFolder(id) { return Store.indexes.byId.get(id); }
 
   window.KB = {
-    Store, byId, renderAll, renderCategories, renderTypes, renderCatalog, findFolder, enterFolder,
+    Store, byId, renderAll, renderCategories, renderGlobalStructure, renderTypes, renderCatalog, findFolder, enterFolder,
   };
 })();

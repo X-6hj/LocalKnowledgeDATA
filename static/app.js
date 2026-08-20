@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const { Store, byId, renderAll, renderCategories, renderTypes, renderCatalog, findFolder, enterFolder } = window.KB;
+  const { Store, byId, renderAll, renderCategories, renderGlobalStructure, renderTypes, renderCatalog, findFolder, enterFolder } = window.KB;
   let toastTimer = 0;
   let refreshTimer = 0;
   let hoveredId = "";
@@ -171,6 +171,102 @@
     byId("resetFilters").addEventListener("click", resetFilters);
   }
 
+  function setupGlobalStructure() {
+    const dialog = byId("structureDialog");
+    const opener = byId("structureOpen");
+    const search = byId("structureSearch");
+    let initialized = false;
+
+    const expandCurrentPath = () => {
+      let path = Store.currentPath;
+      while (path) {
+        Store.structureExpanded.add(path);
+        path = Store.indexes.byPath.get(path)?.parent_path || "";
+      }
+    };
+
+    opener.addEventListener("click", () => {
+      hideTooltip();
+      if (!initialized) {
+        Store.catalog.folders.forEach((folder) => {
+          if (folder.child_count) Store.structureExpanded.add(folder.path);
+        });
+        initialized = true;
+      } else {
+        expandCurrentPath();
+      }
+      dialog.showModal();
+      renderGlobalStructure();
+      search.focus();
+    });
+
+    search.addEventListener("input", (event) => {
+      Store.structureQuery = event.target.value;
+      renderGlobalStructure();
+    });
+
+    byId("structureFileToggle").addEventListener("change", (event) => {
+      Store.structureShowFiles = event.target.checked;
+      if (Store.structureShowFiles) {
+        Store.catalog.folders.forEach((folder) => {
+          if (folder.files.length) Store.structureExpanded.add(folder.path);
+        });
+      }
+      renderGlobalStructure();
+    });
+
+    byId("structureExpandCurrent").addEventListener("click", () => {
+      expandCurrentPath();
+      renderGlobalStructure();
+      const current = dialog.querySelector('[aria-current="page"]');
+      current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      current?.focus({ preventScroll: true });
+    });
+
+    byId("structureExpandAll").addEventListener("click", () => {
+      Store.catalog.folders.forEach((folder) => {
+        if (folder.child_count || (Store.structureShowFiles && folder.files.length)) {
+          Store.structureExpanded.add(folder.path);
+        }
+      });
+      renderGlobalStructure();
+    });
+
+    byId("structureCollapseAll").addEventListener("click", () => {
+      Store.structureExpanded.clear();
+      Store.structureQuery = "";
+      search.value = "";
+      renderGlobalStructure();
+      search.focus();
+    });
+
+    byId("structureTree").addEventListener("click", (event) => {
+      const action = event.target.closest("[data-action]");
+      if (!action) return;
+      if (action.dataset.action === "structure-toggle") {
+        const path = action.dataset.path;
+        if (Store.structureExpanded.has(path)) Store.structureExpanded.delete(path);
+        else Store.structureExpanded.add(path);
+        renderGlobalStructure();
+        dialog.querySelector(`[data-action="structure-toggle"][data-path="${CSS.escape(path)}"]`)?.focus();
+      }
+      if (action.dataset.action === "structure-enter") {
+        enterFolder(action.dataset.path);
+        dialog.close();
+      }
+    });
+
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      Store.structureQuery = "";
+      search.value = "";
+      byId("structureTree").replaceChildren();
+      opener.focus();
+    });
+  }
+
   function setupCards() {
     const grid = byId("cardGrid");
     const closeFileMenus = (except = null) => {
@@ -262,7 +358,7 @@
   }
 
   async function init() {
-    setupTheme(); setupFilters(); setupCards(); setupDialogs(); setupKeyboard();
+    setupTheme(); setupFilters(); setupGlobalStructure(); setupCards(); setupDialogs(); setupKeyboard();
     await loadCatalog(true);
   }
 
