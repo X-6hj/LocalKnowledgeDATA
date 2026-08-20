@@ -1,7 +1,9 @@
 """生成供 AI 与人快速阅读的知识库全局结构快照。"""
 from __future__ import annotations
 
+import os
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +11,8 @@ SNAPSHOT_FILENAME = "KNOWLEDGE_STRUCTURE.md"
 
 
 def _one_line(value: Any, limit: int = 96) -> str:
-    text = " ".join(str(value or "").split())
+    safe = "".join(character for character in str(value or "") if unicodedata.category(character) != "Cc")
+    text = " ".join(safe.split()).replace("`", "ˋ")
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
@@ -42,9 +45,14 @@ def render_structure_snapshot(catalog: dict[str, Any]) -> str:
     def append_folder(folder: dict[str, Any], prefix: str, is_last: bool) -> None:
         branch = "└─ " if is_last else "├─ "
         summary = _one_line(folder.get("summary"))
+        real_name = _one_line(folder.get("name") or folder.get("title") or "未命名", 160)
+        display_title = _one_line(folder.get("title"), 160)
+        folder_label = real_name
+        if display_title and display_title != real_name:
+            folder_label += f"（显示：{display_title}）"
         counts = f"{folder.get('child_count', 0)} 子目录 · {len(folder.get('files') or [])} 直属文件"
         detail = f" — {summary}" if summary else ""
-        lines.append(f"{prefix}{branch}{folder.get('name', folder.get('title', '未命名'))}/  [{counts}]{detail}")
+        lines.append(f"{prefix}{branch}{folder_label}/  [{counts}]{detail}")
 
         child_prefix = prefix + ("   " if is_last else "│  ")
         folder_children = children.get(str(folder.get("path") or ""), [])
@@ -59,7 +67,7 @@ def render_structure_snapshot(catalog: dict[str, Any]) -> str:
                 append_folder(entry, child_prefix, entry_is_last)
             else:
                 file_branch = "└─ " if entry_is_last else "├─ "
-                lines.append(f"{child_prefix}{file_branch}{entry.get('name', '未命名文件')}")
+                lines.append(f"{child_prefix}{file_branch}{_one_line(entry.get('name') or '未命名文件', 200)}")
 
     roots = children.get("", [])
     for index, folder in enumerate(roots):
@@ -93,6 +101,8 @@ def write_structure_snapshot(path: Path, catalog: dict[str, Any]) -> bool:
             delete=False,
         ) as stream:
             stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
             temporary = Path(stream.name)
         temporary.replace(path)
     finally:

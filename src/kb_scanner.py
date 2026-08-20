@@ -253,7 +253,8 @@ def _loose_file_item(file: dict[str, Any], category: dict[str, Any], parent_path
     }
 
 
-def _tree_signature(library_dir: Path) -> str:
+def tree_signature(library_dir: Path) -> str:
+    """快速计算可见目录树签名，不解析目录元数据与正文。"""
     digest = hashlib.sha1()
     if not library_dir.exists():
         return digest.hexdigest()
@@ -347,7 +348,7 @@ def scan_library(library_dir: Path, config: dict[str, Any] | None = None) -> dic
 
     return {
         "schema_version": 2,
-        "revision": _tree_signature(library_dir),
+        "revision": tree_signature(library_dir),
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "site": config or {},
         "stats": {

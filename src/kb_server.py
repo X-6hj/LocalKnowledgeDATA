@@ -19,7 +19,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from .kb_scanner import load_json_safe, scan_library
+from .kb_scanner import load_json_safe, scan_library, tree_signature
 from .knowledge_structure import SNAPSHOT_FILENAME, write_structure_snapshot
 
 
@@ -54,6 +54,9 @@ class KnowledgeBaseApp:
         self.config_path = self.base_dir / "config.json"
         self.structure_snapshot_path = self.base_dir / SNAPSHOT_FILENAME
         self._cache_lock = threading.Lock()
+        self._refresh_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._refresh_thread: threading.Thread | None = None
         self._catalog: dict[str, Any] | None = None
         self._revision = ""
         self.logger = self._setup_logger()
@@ -72,7 +75,12 @@ class KnowledgeBaseApp:
         return logger
 
     def close(self) -> None:
-        """关闭日志文件句柄，便于 Windows 正常停止、测试与移动目录。"""
+        """停止后台刷新并关闭日志句柄；可安全重复调用。"""
+        self._stop_event.set()
+        thread = self._refresh_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2)
+        self._refresh_thread = None
         for handler in list(self.logger.handlers):
             handler.close()
             self.logger.removeHandler(handler)
@@ -88,22 +96,79 @@ class KnowledgeBaseApp:
         return defaults
 
     def catalog(self) -> dict[str, Any]:
-        # 扫描函数会计算稳定修订号；缓存只用于同一修订号，避免返回陈旧对象。
-        fresh = scan_library(self.library_dir, self.config())
+        """返回后台维护的 catalog；HTTP 请求不会触发完整目录扫描。"""
         with self._cache_lock:
-            if self._catalog is None or fresh["revision"] != self._revision:
+            cached = self._catalog
+        if cached is not None:
+            return cached
+        return self.refresh_catalog(force=True)
+
+    def refresh_catalog(self, *, force: bool = False) -> dict[str, Any]:
+        """探测目录签名，并在必要时串行重建 catalog 与固定快照。"""
+        with self._refresh_lock:
+            observed_revision = tree_signature(self.library_dir)
+            with self._cache_lock:
+                cached = self._catalog
+                cached_revision = self._revision
+            if cached is not None and not force and observed_revision == cached_revision:
+                return cached
+
+            fresh: dict[str, Any] | None = None
+            stable = False
+            before = observed_revision
+            for _attempt in range(2):
+                candidate = scan_library(self.library_dir, self.config())
+                after = tree_signature(self.library_dir)
+                fresh = candidate
+                if before == candidate["revision"] == after:
+                    stable = True
+                    break
+                before = after
+            if not stable and cached is not None:
+                self.logger.warning("扫描期间目录持续变化，本轮保留上一版索引")
+                return cached
+            if not stable:
+                self.logger.warning("首次扫描期间目录发生变化，已发布最后一次完整扫描结果")
+            assert fresh is not None
+
+            with self._cache_lock:
                 self._catalog = fresh
                 self._revision = fresh["revision"]
-                try:
-                    write_structure_snapshot(self.structure_snapshot_path, fresh)
-                except OSError as exc:
-                    # 快照是辅助索引；磁盘只读或被占用时仍应保证网页目录可用。
-                    self.logger.warning("无法更新全局结构快照：%s", exc)
-                self.logger.info(
-                    "索引已更新：%s 个分类，%s 个条目，%s 个文件",
-                    fresh["stats"]["categories"], fresh["stats"]["items"], fresh["stats"]["files"]
-                )
-            return self._catalog
+            try:
+                write_structure_snapshot(self.structure_snapshot_path, fresh)
+            except OSError as exc:
+                self.logger.warning("无法更新全局结构快照：%s", exc)
+            self.logger.info(
+                "索引已更新：%s 个分类，%s 个条目，%s 个文件",
+                fresh["stats"]["categories"], fresh["stats"]["items"], fresh["stats"]["files"]
+            )
+            return fresh
+
+    def start_auto_refresh(self) -> None:
+        """启动单一后台刷新线程；重复调用不会创建多份线程。"""
+        thread = self._refresh_thread
+        if thread is not None and thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._refresh_thread = threading.Thread(
+            target=self._auto_refresh_loop,
+            name="knowledge-catalog-refresh",
+            daemon=True,
+        )
+        self._refresh_thread.start()
+
+    def _auto_refresh_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                interval = max(0.1, float(self.config().get("refresh_seconds", 5)))
+            except (TypeError, ValueError):
+                interval = 5.0
+            if self._stop_event.wait(interval):
+                break
+            try:
+                self.refresh_catalog()
+            except Exception:
+                self.logger.exception("后台刷新知识库索引失败")
 
     def resolve_library_path(self, relative_path: str) -> Path:
         decoded = urllib.parse.unquote(relative_path).replace("\\", "/").lstrip("/")
@@ -404,7 +469,16 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
 
 def create_server(base_dir: Path, host: str = "127.0.0.1", port: int = 8765) -> ReuseThreadingHTTPServer:
     app = KnowledgeBaseApp(base_dir)
-    server = ReuseThreadingHTTPServer((host, port), KnowledgeBaseHandler)
-    server.app = app  # type: ignore[attr-defined]
-    app.catalog()
-    return server
+    server: ReuseThreadingHTTPServer | None = None
+    try:
+        server = ReuseThreadingHTTPServer((host, port), KnowledgeBaseHandler)
+        server.app = app  # type: ignore[attr-defined]
+        app.refresh_catalog(force=True)
+        app.start_auto_refresh()
+        return server
+    except BaseException:
+        if server is not None:
+            server.server_close()
+        else:
+            app.close()
+        raise

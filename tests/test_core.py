@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -17,6 +19,7 @@ from unittest.mock import patch
 
 from src.kb_scanner import parse_markdown_meta, scan_library
 from src.kb_server import KnowledgeBaseApp, KnowledgeBaseHandler, create_server
+from src.knowledge_structure import render_structure_snapshot, write_structure_snapshot
 from stop import stop_windows_process, stop_windows_project_processes
 
 
@@ -76,7 +79,7 @@ class ScannerTests(unittest.TestCase):
 
             self.assertEqual(folder["primary_file"]["name"], "安全入口.html")
 
-    def test_empty_directory_changes_revision_and_catalog_cache(self) -> None:
+    def test_catalog_is_cached_until_explicit_refresh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             library = base / "library"
@@ -85,21 +88,83 @@ class ScannerTests(unittest.TestCase):
             first = app.catalog()
 
             (library / "主题" / "空目录").mkdir()
-            second = app.catalog()
+            self.assertEqual(first["revision"], app.catalog()["revision"])
+            second = app.refresh_catalog()
             self.assertNotEqual(first["revision"], second["revision"])
             self.assertIn("主题/空目录", {folder["path"] for folder in second["folders"]})
 
             (library / "主题" / "空目录").rename(library / "主题" / "已重命名")
-            third = app.catalog()
+            third = app.refresh_catalog()
             self.assertNotEqual(second["revision"], third["revision"])
             self.assertIn("主题/已重命名", {folder["path"] for folder in third["folders"]})
 
             (library / "主题" / "已重命名").rmdir()
-            fourth = app.catalog()
+            fourth = app.refresh_catalog()
             self.assertNotEqual(third["revision"], fourth["revision"])
             self.assertIn("主题/已重命名", {folder["path"] for folder in third["folders"]})
             self.assertNotIn("主题/已重命名", {folder["path"] for folder in fourth["folders"]})
             app.close()
+
+    def test_background_refresh_updates_snapshot_without_catalog_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            library = base / "library"
+            (library / "初始目录").mkdir(parents=True)
+            (base / "config.json").write_text('{"refresh_seconds": 0.05}', encoding="utf-8")
+            server = create_server(base, "127.0.0.1", 0)
+            try:
+                snapshot = base / "KNOWLEDGE_STRUCTURE.md"
+                self.assertNotIn("后台新增", snapshot.read_text(encoding="utf-8"))
+                (library / "后台新增").mkdir()
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    if "后台新增" in snapshot.read_text(encoding="utf-8"):
+                        break
+                    time.sleep(0.02)
+                self.assertIn("后台新增", snapshot.read_text(encoding="utf-8"))
+            finally:
+                server.server_close()
+
+    def test_startup_scan_failure_releases_bound_port(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "library").mkdir()
+            probe = socket.socket()
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+            probe.close()
+            with patch("src.kb_server.scan_library", side_effect=OSError("扫描失败")):
+                with self.assertRaises(OSError):
+                    create_server(base, "127.0.0.1", port)
+            rebound = socket.socket()
+            try:
+                rebound.bind(("127.0.0.1", port))
+            finally:
+                rebound.close()
+
+    def test_structure_snapshot_escapes_code_fences_and_shows_real_and_display_names(self) -> None:
+        catalog = {
+            "revision": "rev",
+            "stats": {"folders": 1, "files": 1, "max_depth": 1},
+            "folders": [{
+                "path": "真实`目录", "parent_path": "", "name": "真实`目录", "title": "展示标题",
+                "summary": "危险 ``` 摘要\x00", "child_count": 0,
+                "files": [{"name": "代码```片段.md"}],
+            }],
+        }
+        text = render_structure_snapshot(catalog)
+        self.assertEqual(text.count("```"), 2)
+        self.assertNotIn("\x00", text)
+        self.assertIn("真实", text)
+        self.assertIn("展示标题", text)
+
+    def test_structure_snapshot_flushes_content_before_atomic_replace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "KNOWLEDGE_STRUCTURE.md"
+            catalog = {"revision": "rev", "stats": {}, "folders": []}
+            with patch("src.knowledge_structure.os.fsync") as fsync:
+                self.assertTrue(write_structure_snapshot(target, catalog))
+            fsync.assert_called_once()
 
     def test_server_startup_creates_fixed_global_structure_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
