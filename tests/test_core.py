@@ -608,6 +608,20 @@ class StaticFrontendContractTests(unittest.TestCase):
         self.assertIn("题目", context)
         self.assertIn("教学", context)
 
+    def test_project_context_documents_optional_ui_skill_setup(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        context = (project / "AGENTS.md").read_text(encoding="utf-8")
+        setup = (project / "docs" / "AI前端技能与可选工具.md").read_text(encoding="utf-8")
+
+        self.assertIn("ui-skills-root", context)
+        self.assertIn("ui-skills@0.2.4", context)
+        self.assertIn("AI前端技能与可选工具.md", context)
+        self.assertIn("npx skills add https://github.com/ibelick/ui-skills --skill ui-skills-root", setup)
+        self.assertIn("npx --yes ui-skills@0.2.4", setup)
+        self.assertIn("未接入 MCP", setup)
+        self.assertIn("不上传知识库", setup)
+        self.assertIn("降级", setup)
+
     def test_current_folder_exposes_primary_learning_entry(self) -> None:
         project = Path(__file__).resolve().parents[1]
         index = (project / "static" / "index.html").read_text(encoding="utf-8")

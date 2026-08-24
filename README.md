@@ -101,6 +101,7 @@ placement: route
 - `AGENTS.md`：AI 打开项目时自动加载的查询优先、局部检查和禁止套版规则；
 - `docs/学习页安全与质量底线.md`：不可复制成页面的离线、安全、可访问性与验收约束；
 - `docs/HTML学习笔记设计规范.md`：HTML 学习页的教学设计、内容与视觉验收标准；
+- `docs/AI前端技能与可选工具.md`：`ui-skills-root` 的安装、按需 CLI、隐私、降级与未接入 MCP 的原因；
 - `KNOWLEDGE_ROUTING.md`：自动生成的精简 AI 选址路由（运行文件，不提交 Git）；
 - `KNOWLEDGE_STRUCTURE.md`：自动生成的完整全库结构快照，用于低置信度后的审计与人工总览（运行文件，不提交 Git）；
 - `AI资料整理与放置指南.md`：未来 AI 先查最多 3 个候选，再按需读取快照并局部核验；
@@ -118,6 +119,17 @@ python3 query_placement.py --title "<标题>" --keywords "<知识模型 技巧 �
 ```
 
 它只返回最多 3 个候选、命中依据和可能重复项；中低置信度时再读 `KNOWLEDGE_ROUTING.md`，仍无法判断时才读完整结构。若服务未运行但刚刚人工修改了 `library/`，可执行 `python3 generate_structure.py`；纯 Windows 使用 `runtime\windows-python\python.exe generate_structure.py`。脚本一次刷新两个固定快照。
+
+### 可选的 AI 前端技能
+
+今后新增学习页时，推荐安装 `ui-skills-root`，再通过固定版本 CLI 按任务选择最小专项技能集合；它不是知识库服务的运行依赖，也不会修改现有页面：
+
+```bash
+npx skills add https://github.com/ibelick/ui-skills --skill ui-skills-root -g -y
+npx --yes ui-skills@0.2.4 categories
+```
+
+项目**未接入 UI Skills MCP**。CLI/MCP 不可用时继续使用本地前端设计技能和项目文档完成任务，不得阻塞资料添加。完整安装、隐私、降级、版本与选择规则见 `docs/AI前端技能与可选工具.md`。
 
 ## 当前限制与后续扩展
 
