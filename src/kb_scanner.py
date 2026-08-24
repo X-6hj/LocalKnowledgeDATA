@@ -186,6 +186,9 @@ def _directory_record(folder: Path, library_dir: Path) -> dict[str, Any]:
         + [datetime.fromisoformat(file["modified"]).timestamp() for file in files]
     )
     summary = str(meta.get("summary") or (description.split("\n\n", 1)[0] if description else ""))
+    placement_role = str(meta.get("placement") or "auto").strip().casefold()
+    if placement_role not in {"auto", "route", "leaf"}:
+        placement_role = "auto"
     parent_path = relative.parent.as_posix() if depth > 1 else ""
     if parent_path == ".":
         parent_path = ""
@@ -200,6 +203,7 @@ def _directory_record(folder: Path, library_dir: Path) -> dict[str, Any]:
         "description": description or "暂无详细说明。",
         "icon": str(meta.get("icon") or ("◇" if depth == 1 else "›")),
         "tags": _tags(meta.get("tags", [])),
+        "placement_role": placement_role,
         "pinned": bool(meta.get("pinned", False)),
         "order": _integer(meta.get("order", 9999)),
         "files": files,

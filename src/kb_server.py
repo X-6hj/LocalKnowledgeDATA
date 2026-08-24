@@ -21,9 +21,10 @@ from typing import Any
 
 from .kb_scanner import load_json_safe, scan_library, tree_signature
 from .knowledge_structure import SNAPSHOT_FILENAME, write_structure_snapshot
+from .placement_router import ROUTING_SNAPSHOT_FILENAME, query_placement, write_routing_snapshot
 
 
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.6.0"
 
 
 class ReuseThreadingHTTPServer(ThreadingHTTPServer):
@@ -53,6 +54,7 @@ class KnowledgeBaseApp:
         self.static_dir = (self.base_dir / "static").resolve()
         self.config_path = self.base_dir / "config.json"
         self.structure_snapshot_path = self.base_dir / SNAPSHOT_FILENAME
+        self.routing_snapshot_path = self.base_dir / ROUTING_SNAPSHOT_FILENAME
         self._cache_lock = threading.Lock()
         self._refresh_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -138,6 +140,10 @@ class KnowledgeBaseApp:
                 write_structure_snapshot(self.structure_snapshot_path, fresh)
             except OSError as exc:
                 self.logger.warning("无法更新全局结构快照：%s", exc)
+            try:
+                write_routing_snapshot(self.routing_snapshot_path, fresh)
+            except OSError as exc:
+                self.logger.warning("无法更新 AI 选址路由：%s", exc)
             self.logger.info(
                 "索引已更新：%s 个分类，%s 个条目，%s 个文件",
                 fresh["stats"]["categories"], fresh["stats"]["items"], fresh["stats"]["files"]
@@ -349,6 +355,23 @@ class KnowledgeBaseHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/catalog":
             self._json({"ok": True, "data": self.app.catalog(), "error": None})
+            return
+        if path == "/api/placement":
+            parameters = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+            title = str((parameters.get("title") or [""])[0])
+            keywords = str((parameters.get("keywords") or [""])[0])
+            raw_limit = str((parameters.get("limit") or ["3"])[0])
+            try:
+                result = query_placement(
+                    self.app.catalog(),
+                    title=title,
+                    keywords=keywords,
+                    limit=int(raw_limit),
+                )
+            except ValueError as exc:
+                self._error(str(exc), HTTPStatus.BAD_REQUEST)
+                return
+            self._json({"ok": True, "data": result, "error": None})
             return
         if path.startswith("/files/"):
             self._serve_library_file(path[len("/files/"):])

@@ -8,6 +8,8 @@ __pycache__/
 .server.pid
 /KNOWLEDGE_STRUCTURE.md
 /.KNOWLEDGE_STRUCTURE.md.*.tmp
+/KNOWLEDGE_ROUTING.md
+/.KNOWLEDGE_ROUTING.md.*.tmp
 logs/*.log*
 
 # Personal knowledge files are private by default. Only the exact reviewed files

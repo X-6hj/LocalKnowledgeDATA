@@ -7,12 +7,13 @@ from pathlib import Path
 
 from src.kb_scanner import load_json_safe, scan_library
 from src.knowledge_structure import SNAPSHOT_FILENAME, write_structure_snapshot
+from src.placement_router import ROUTING_SNAPSHOT_FILENAME, write_routing_snapshot
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成固定的知识库全局结构快照")
+    parser = argparse.ArgumentParser(description="生成固定的完整结构快照与精简 AI 选址路由")
     parser.add_argument(
         "--base-dir",
         type=Path,
@@ -23,10 +24,14 @@ def main() -> int:
 
     base_dir = args.base_dir.expanduser().resolve()
     catalog = scan_library(base_dir / "library", load_json_safe(base_dir / "config.json", {}))
-    snapshot = base_dir / SNAPSHOT_FILENAME
-    changed = write_structure_snapshot(snapshot, catalog)
-    state = "已更新" if changed else "无需改写"
-    print(f"{state}：{snapshot}")
+    outputs = [
+        (base_dir / SNAPSHOT_FILENAME, write_structure_snapshot),
+        (base_dir / ROUTING_SNAPSHOT_FILENAME, write_routing_snapshot),
+    ]
+    for snapshot, writer in outputs:
+        changed = writer(snapshot, catalog)
+        state = "已更新" if changed else "无需改写"
+        print(f"{state}：{snapshot}")
     return 0
 
 

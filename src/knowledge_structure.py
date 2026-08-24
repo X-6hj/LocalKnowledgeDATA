@@ -83,9 +83,8 @@ def render_structure_snapshot(catalog: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def write_structure_snapshot(path: Path, catalog: dict[str, Any]) -> bool:
-    """原子更新固定快照；内容未变化时不改写，避免无意义时间戳与 Git 噪声。"""
-    content = render_structure_snapshot(catalog)
+def write_generated_snapshot(path: Path, content: str) -> bool:
+    """原子更新固定生成文件；内容未变化时不改写。"""
     try:
         if path.read_text(encoding="utf-8") == content:
             return False
@@ -113,3 +112,8 @@ def write_structure_snapshot(path: Path, catalog: dict[str, Any]) -> bool:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return True
+
+
+def write_structure_snapshot(path: Path, catalog: dict[str, Any]) -> bool:
+    """渲染并原子更新固定的完整结构快照。"""
+    return write_generated_snapshot(path, render_structure_snapshot(catalog))

@@ -11,6 +11,7 @@ import threading
 import time
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -114,14 +115,20 @@ class ScannerTests(unittest.TestCase):
             server = create_server(base, "127.0.0.1", 0)
             try:
                 snapshot = base / "KNOWLEDGE_STRUCTURE.md"
+                routing = base / "KNOWLEDGE_ROUTING.md"
                 self.assertNotIn("后台新增", snapshot.read_text(encoding="utf-8"))
+                self.assertNotIn("后台新增", routing.read_text(encoding="utf-8"))
                 (library / "后台新增").mkdir()
                 deadline = time.monotonic() + 2
                 while time.monotonic() < deadline:
-                    if "后台新增" in snapshot.read_text(encoding="utf-8"):
+                    if (
+                        "后台新增" in snapshot.read_text(encoding="utf-8")
+                        and "后台新增" in routing.read_text(encoding="utf-8")
+                    ):
                         break
                     time.sleep(0.02)
                 self.assertIn("后台新增", snapshot.read_text(encoding="utf-8"))
+                self.assertIn("后台新增", routing.read_text(encoding="utf-8"))
             finally:
                 server.server_close()
 
@@ -171,19 +178,25 @@ class ScannerTests(unittest.TestCase):
             base = Path(tmp)
             topic = base / "library" / "算法" / "数论"
             topic.mkdir(parents=True)
-            (topic / "_说明.md").write_text("---\nsummary: 整数算法。\n---\n", encoding="utf-8")
+            (topic / "_说明.md").write_text("---\nsummary: 整数算法。\nplacement: route\n---\n", encoding="utf-8")
             (topic / "欧几里得.cpp").write_text("// gcd", encoding="utf-8")
 
             server = create_server(base, "127.0.0.1", 0)
             try:
                 snapshot = base / "KNOWLEDGE_STRUCTURE.md"
+                routing = base / "KNOWLEDGE_ROUTING.md"
                 self.assertTrue(snapshot.is_file())
+                self.assertTrue(routing.is_file())
                 text = snapshot.read_text(encoding="utf-8")
+                routing_text = routing.read_text(encoding="utf-8")
                 self.assertIn("library/", text)
                 self.assertIn("算法/", text)
                 self.assertIn("数论/", text)
                 self.assertIn("欧几里得.cpp", text)
                 self.assertIn("整数算法。", text)
+                self.assertIn("算法/数论", routing_text)
+                self.assertIn("整数算法。", routing_text)
+                self.assertNotIn("欧几里得.cpp", routing_text)
             finally:
                 server.server_close()
 
@@ -215,7 +228,9 @@ class ScannerTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("KNOWLEDGE_STRUCTURE.md", result.stdout)
+            self.assertIn("KNOWLEDGE_ROUTING.md", result.stdout)
             self.assertIn("C++/", (base / "KNOWLEDGE_STRUCTURE.md").read_text(encoding="utf-8"))
+            self.assertIn("课程/C++", (base / "KNOWLEDGE_ROUTING.md").read_text(encoding="utf-8"))
 
     def test_hidden_ancestors_are_pruned(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -360,6 +375,217 @@ class ScannerTests(unittest.TestCase):
             self.assertFalse(meta["pinned"])
             self.assertEqual(body, "标题\n正文")
 
+    def test_ai_routing_snapshot_keeps_reusable_routes_and_omits_leaf_attachments(self) -> None:
+        from src.placement_router import render_routing_snapshot
+
+        catalog = {
+            "revision": "route-rev",
+            "stats": {"folders": 5, "files": 4, "max_depth": 4},
+            "folders": [
+                {
+                    "path": "算法", "parent_path": "", "depth": 1, "name": "算法", "title": "算法专题",
+                    "summary": "算法根目录。", "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构", "parent_path": "算法", "depth": 2, "name": "数据结构",
+                    "title": "数据结构", "summary": "维护动态信息。", "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构/树状数组", "parent_path": "算法/数据结构", "depth": 3,
+                    "name": "树状数组", "title": "树状数组", "summary": "单点修改与前缀聚合。",
+                    "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构/树状数组/Problem E", "parent_path": "算法/数据结构/树状数组",
+                    "depth": 4, "name": "Problem E", "title": "Problem E", "summary": "一道具体题目。",
+                    "child_count": 0, "files": [
+                        {"name": "Problem E.html"}, {"name": "Problem E.md"}, {"name": "Problem E.cpp"},
+                    ],
+                },
+                {
+                    "path": "算法/数据结构/树状数组/旧题单文件", "parent_path": "算法/数据结构/树状数组",
+                    "depth": 4, "name": "旧题单文件", "title": "旧题单文件", "summary": "仅保留一份代码的具体题目。",
+                    "child_count": 0, "files": [{"name": "旧题单文件.cpp"}],
+                },
+            ],
+        }
+
+        text = render_routing_snapshot(catalog)
+
+        self.assertIn("AI 选址路由", text)
+        self.assertIn("route-rev", text)
+        self.assertIn("算法/数据结构/树状数组", text)
+        self.assertIn("单点修改与前缀聚合", text)
+        self.assertNotIn("Problem E.html", text)
+        self.assertNotIn("Problem E.cpp", text)
+        self.assertNotIn("算法/数据结构/树状数组/Problem E", text)
+        self.assertNotIn("算法/数据结构/树状数组/旧题单文件", text)
+
+    def test_ai_routing_snapshot_is_atomic_and_unchanged_content_is_not_rewritten(self) -> None:
+        from src.placement_router import write_routing_snapshot
+
+        catalog = {"revision": "same", "stats": {}, "folders": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "KNOWLEDGE_ROUTING.md"
+            self.assertTrue(write_routing_snapshot(target, catalog))
+            first_mtime = target.stat().st_mtime_ns
+            self.assertFalse(write_routing_snapshot(target, catalog))
+            self.assertEqual(target.stat().st_mtime_ns, first_mtime)
+            self.assertEqual(list(target.parent.glob(".KNOWLEDGE_ROUTING.md.*.tmp")), [])
+
+    def test_placement_query_prefers_specific_reusable_route_and_reports_duplicate_leaf(self) -> None:
+        from src.placement_router import query_placement
+
+        catalog = {
+            "revision": "query-rev",
+            "folders": [
+                {
+                    "path": "算法/数据结构", "parent_path": "算法", "depth": 2, "name": "数据结构",
+                    "title": "数据结构", "summary": "维护动态信息。", "tags": ["数据结构"],
+                    "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构/树状数组", "parent_path": "算法/数据结构", "depth": 3,
+                    "name": "树状数组", "title": "树状数组", "summary": "支持单点修改和区间求和。",
+                    "tags": ["树状数组", "前缀和"], "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构/树状数组/局部状态动态维护",
+                    "parent_path": "算法/数据结构/树状数组", "depth": 4, "name": "局部状态动态维护",
+                    "title": "局部状态动态维护", "summary": "单点修改后只重算相邻位置，再做区间求和。",
+                    "tags": ["局部重算"], "child_count": 1, "files": [],
+                },
+                {
+                    "path": "算法/数据结构/树状数组/局部状态动态维护/E - 小月的相邻数组",
+                    "parent_path": "算法/数据结构/树状数组/局部状态动态维护", "depth": 5,
+                    "name": "E - 小月的相邻数组", "title": "E - 小月的相邻数组",
+                    "summary": "三点重算与开区间求和。", "tags": ["题目"], "child_count": 0,
+                    "files": [{"name": "E - 小月的相邻数组.html"}],
+                    "primary_file": {"name": "E - 小月的相邻数组.html"},
+                },
+                {
+                    "path": "算法/动态规划/值域状态 DP", "parent_path": "算法/动态规划", "depth": 3,
+                    "name": "值域状态 DP", "title": "值域状态 DP", "summary": "按值域保存状态。",
+                    "tags": ["动态规划"], "child_count": 1, "files": [],
+                },
+            ],
+        }
+
+        result = query_placement(
+            catalog,
+            title="E - 小月的相邻数组",
+            keywords="树状数组 单点修改 区间求和 局部重算",
+            limit=3,
+        )
+
+        self.assertEqual(result["revision"], "query-rev")
+        self.assertEqual(result["candidates"][0]["path"], "算法/数据结构/树状数组/局部状态动态维护")
+        self.assertNotIn(
+            "算法/数据结构/树状数组/局部状态动态维护/E - 小月的相邻数组",
+            {candidate["path"] for candidate in result["candidates"]},
+        )
+        self.assertIn(
+            "算法/数据结构/树状数组/局部状态动态维护/E - 小月的相邻数组",
+            {duplicate["path"] for duplicate in result["possible_duplicates"]},
+        )
+        self.assertIn("E - 小月的相邻数组", result["candidates"][0]["direct_children"])
+        self.assertLessEqual(len(result["candidates"]), 3)
+
+    def test_placement_query_reports_exact_duplicate_for_short_title(self) -> None:
+        from src.placement_router import query_placement
+
+        catalog = {
+            "revision": "short-title",
+            "folders": [
+                {
+                    "path": "算法/图论", "parent_path": "算法", "depth": 2, "name": "图论", "title": "图论",
+                    "summary": "图算法主题。", "tags": ["图论"], "child_count": 1, "files": [],
+                },
+            ],
+        }
+
+        result = query_placement(catalog, title="图论", limit=3)
+
+        self.assertIn(
+            "算法/图论",
+            {duplicate["path"] for duplicate in result["possible_duplicates"]},
+        )
+
+    def test_placement_query_cli_returns_small_json_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            method = base / "library" / "算法" / "数据结构" / "树状数组"
+            method.mkdir(parents=True)
+            (method / "_说明.md").write_text(
+                "---\nsummary: 支持单点修改与区间求和。\ntags: [树状数组, 前缀和]\n---\n",
+                encoding="utf-8",
+            )
+            script = Path(__file__).resolve().parents[1] / "query_placement.py"
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(script), "--base-dir", str(base), "--title", "新题",
+                    "--keywords", "树状数组 单点修改", "--limit", "2", "--json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["candidates"][0]["path"], "算法/数据结构/树状数组")
+            self.assertLessEqual(len(payload["candidates"]), 2)
+            self.assertNotIn("description", result.stdout)
+
+    def test_placement_query_cli_does_not_create_missing_library(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "not-a-project"
+            base.mkdir()
+            script = Path(__file__).resolve().parents[1] / "query_placement.py"
+
+            result = subprocess.run(
+                [sys.executable, str(script), "--base-dir", str(base), "--title", "新题", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((base / "library").exists())
+
+    def test_explicit_placement_role_overrides_automatic_route_heuristic(self) -> None:
+        from src.placement_router import query_placement
+
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Path(tmp) / "library"
+            route = library / "算法" / "专题容器"
+            leaf = library / "算法" / "占位叶子"
+            route.mkdir(parents=True)
+            leaf.mkdir(parents=True)
+            (route / "_说明.md").write_text(
+                "---\nplacement: route\nsummary: 允许继续放置子主题。\n---\n",
+                encoding="utf-8",
+            )
+            for suffix in ("html", "md", "cpp"):
+                (route / f"附属说明.{suffix}").write_text("x", encoding="utf-8")
+            (leaf / "_说明.md").write_text(
+                "---\nplacement: leaf\nsummary: 不接受子主题。\n---\n",
+                encoding="utf-8",
+            )
+
+            catalog = scan_library(library)
+            folders = {folder["path"]: folder for folder in catalog["folders"]}
+            self.assertEqual(folders["算法/专题容器"]["placement_role"], "route")
+            self.assertEqual(folders["算法/占位叶子"]["placement_role"], "leaf")
+
+            result = query_placement(catalog, keywords="允许继续放置", limit=5)
+            paths = {candidate["path"] for candidate in result["candidates"]}
+            self.assertIn("算法/专题容器", paths)
+            self.assertNotIn("算法/占位叶子", paths)
+
 
 class StaticFrontendContractTests(unittest.TestCase):
     def test_generated_structure_snapshot_is_private_runtime_output(self) -> None:
@@ -367,6 +593,20 @@ class StaticFrontendContractTests(unittest.TestCase):
         gitignore = (project / ".gitignore").read_text(encoding="utf-8")
 
         self.assertIn("/KNOWLEDGE_STRUCTURE.md", gitignore)
+        self.assertIn("/KNOWLEDGE_ROUTING.md", gitignore)
+        self.assertIn("/.KNOWLEDGE_ROUTING.md.*.tmp", gitignore)
+
+    def test_project_context_requires_query_first_and_forbids_template_copying(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        context = (project / "AGENTS.md").read_text(encoding="utf-8")
+
+        self.assertIn("query_placement.py", context)
+        self.assertIn("creative/frontend-design", context)
+        self.assertIn("最多 3 个候选", context)
+        self.assertIn("不要扫描整个", context)
+        self.assertIn("不得直接复制", context)
+        self.assertIn("题目", context)
+        self.assertIn("教学", context)
 
     def test_current_folder_exposes_primary_learning_entry(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -426,22 +666,21 @@ class StaticFrontendContractTests(unittest.TestCase):
         self.assertIn(".structure-resize-handle", style)
         self.assertIn(".structure-resize-hint { display: none; }", style)
 
-    def test_learning_note_template_is_offline_and_csp_compatible(self) -> None:
+    def test_learning_note_safety_reference_is_not_a_copyable_page_template(self) -> None:
         project = Path(__file__).resolve().parents[1]
-        template = (project / "templates" / "学习笔记.html").read_text(encoding="utf-8")
+        old_template = project / "templates" / "学习笔记.html"
+        reference = (project / "docs" / "学习页安全与质量底线.md").read_text(encoding="utf-8")
         note_css = (project / "static" / "note.css").read_text(encoding="utf-8")
 
-        self.assertIn('href="/static/note.css"', template)
-        self.assertNotIn("<script", template.lower())
-        self.assertNotIn("http://", template.lower())
-        self.assertNotIn("https://", template.lower())
-        self.assertNotIn("style=", template.lower())
+        self.assertFalse(old_template.exists())
+        self.assertIn("不得复制", reference)
+        self.assertIn("必须从题目教学模型开始", reference)
+        self.assertIn("/static/note.css", reference)
+        self.assertIn("script-src 'none'", reference)
+        self.assertIn("完整 AC 代码", reference)
+        self.assertIn("整体执行流程", reference)
         self.assertIn("prefers-color-scheme", note_css)
         self.assertIn("@media print", note_css)
-        self.assertIn('id="full-code"', template)
-        self.assertIn("完整 AC 代码", template)
-        self.assertIn("整体执行流程", template)
-        self.assertIn('class="complete-code"', template)
         self.assertIn(".complete-code", note_css)
 
     def test_file_only_folder_does_not_show_empty_search_state(self) -> None:
@@ -475,6 +714,35 @@ class HttpSecurityTests(unittest.TestCase):
                 self.assertIn("connect-src 'none'", policy)
                 self.assertIn("form-action 'none'", policy)
                 self.assertIn("style-src 'self'", policy)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
+    def test_placement_endpoint_returns_compact_candidates_from_cached_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            method = base / "library" / "算法" / "数据结构" / "树状数组"
+            method.mkdir(parents=True)
+            (method / "_说明.md").write_text(
+                "---\nsummary: 支持单点修改和区间求和。\ntags: [树状数组]\n---\n",
+                encoding="utf-8",
+            )
+            server = create_server(base, "127.0.0.1", 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            query = urllib.parse.urlencode({"title": "新题", "keywords": "树状数组 单点修改", "limit": "2"})
+            try:
+                with opener.open(
+                    f"http://127.0.0.1:{server.server_address[1]}/api/placement?{query}",
+                    timeout=3,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 200)
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["data"]["candidates"][0]["path"], "算法/数据结构/树状数组")
+                self.assertNotIn("description", json.dumps(payload, ensure_ascii=False))
             finally:
                 server.shutdown()
                 server.server_close()
@@ -604,7 +872,7 @@ class HttpSecurityTests(unittest.TestCase):
                     timeout=3,
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["data"]["version"], "1.5.1")
+                self.assertEqual(payload["data"]["version"], "1.6.0")
             finally:
                 server.shutdown()
                 server.server_close()
